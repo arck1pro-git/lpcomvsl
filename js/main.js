@@ -81,10 +81,21 @@ function fmt(v) {
   return 'R$\u00A0' + Math.round(v).toLocaleString('pt-BR'); /* ALTERADO: adicionado $ após o R */
 }
 
+function parseMask(str) {
+  return parseFloat((str || '0').replace(/\./g, '').replace(',', '.')) || 0;
+}
+
+function applyMask(str) {
+  var digits = str.replace(/\D/g, '');
+  if (!digits) return '';
+  var num = parseInt(digits, 10) / 100;
+  return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function simCalc() {
   var inputEl  = document.getElementById('inp-capital');
   var sliderEl = document.getElementById('sl-capital');
-  var capital  = Math.max(50000, +inputEl.value || 50000);
+  var capital  = Math.max(50000, parseMask(inputEl.value) || 50000);
 
   sliderEl.value = Math.min(capital, 1000000);
 
@@ -112,7 +123,13 @@ function simCalc() {
 // ALTERADO: substituídos os atributos oninput/onclick inline por addEventListener
 // Capital: input ↔ slider
 document.getElementById('inp-capital').addEventListener('input', function () {
-  var val = +this.value;
+  var cursor = this.selectionStart;
+  var prevLen = this.value.length;
+  this.value = applyMask(this.value);
+  var diff = this.value.length - prevLen;
+  this.setSelectionRange(cursor + diff, cursor + diff);
+
+  var val = parseMask(this.value);
   var warning = document.getElementById('sim-min-warning');
   warning.hidden = !(this.value !== '' && val < 50000);
   document.getElementById('sl-capital').value = Math.min(val || 50000, 1000000);
@@ -120,7 +137,8 @@ document.getElementById('inp-capital').addEventListener('input', function () {
 });
 
 document.getElementById('sl-capital').addEventListener('input', function () {
-  document.getElementById('inp-capital').value = this.value;
+  var num = parseFloat(this.value);
+  document.getElementById('inp-capital').value = num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   simCalc();
 });
 

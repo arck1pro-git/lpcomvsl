@@ -14,7 +14,7 @@
   --bg:        #001031;
   --surface:   #021545;
   --surface-2: #031963;
-  --gold:      #C28F50;
+  --gold:      #DEAE5D;
   --gold-2:    #FAE394;
   --light:     #ECEBE7;
   --light-70:  rgba(236,235,231,0.70);
@@ -138,7 +138,7 @@ a {
 .hero-sub {
   font-size: clamp(1rem, 1.5vw, 1.15rem);
   font-weight: 300;
-  color: var(--light-70);
+  color: var(--light);
   max-width: 440px;
   line-height: 1.9;
   margin-bottom: 2.5rem;
@@ -312,8 +312,8 @@ section {
   margin-bottom: .5rem;
 }
 .ari-hl-label {
-  font-size: .9rem;
-  color: rgba(0,16,49,0.55);
+  font-size: 1rem;
+  color: rgba(3, 3, 3, 0.55);
   line-height: 1.5;
   font-weight: 300;
 }
@@ -384,15 +384,22 @@ section {
   margin-bottom: .35rem;
 }
 .stat-label {
-  font-size: .85rem;
-  color: var(--light-40);
+  font-size: .99rem;
+  color: var(--light);
   line-height: 1.5;
   font-weight: 400;
+}
+.stat-source {
+  font-size: .83rem;
+  color: var(--light);
+  line-height: 1.4;
+  font-weight: 400;
+  margin-top: .25rem;
 }
 
 .litoral-text {
   font-size: 1rem;
-  color: var(--light-70);
+  color: var(--light);
   line-height: 1.9;
   margin-bottom: 2.5rem;
   font-weight: 300;
@@ -557,7 +564,7 @@ input[type="range"]::-moz-range-thumb {
 
 .sim-modo-desc {
   font-size: .82rem;
-  color: var(--light-40);
+  color: var(--light);
   margin-top: .85rem;
   line-height: 1.55;
   font-weight: 300;
@@ -638,7 +645,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .sim-row-label {
   font-size: .88rem;
-  color: var(--light-40);
+  color: var(--light);
   font-weight: 300;
 }
 .sim-row-value {
@@ -651,8 +658,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .sim-disclaimer {
-  font-size: .78rem;
-  color: var(--light-40);
+  font-size: .90rem;
+  color: var(--light);
   text-align: center;
   margin-top: 1.75rem;
   font-weight: 300;
@@ -681,7 +688,7 @@ input[type="range"]::-moz-range-thumb {
 }
 .faq-sidebar p {
   font-size: 1rem;
-  color: var(--light-40);
+  color: var(--light);
   line-height: 1.85;
   margin-bottom: 2rem;
   font-weight: 300;
@@ -732,7 +739,7 @@ input[type="range"]::-moz-range-thumb {
   display: none;
   padding-bottom: 1.4rem;
   font-size: 1rem;
-  color: var(--light-70);
+  color: var(--light);
   line-height: 1.9;
   font-weight: 300;
 }
@@ -949,6 +956,11 @@ footer {
 
   .hero-copy {
     padding: 4rem 1.75rem;
+    text-align: center;
+    align-items: center;
+  }
+  .hero-logo img {
+    margin: 0 auto;
   }
 
   .hero-img-box {
