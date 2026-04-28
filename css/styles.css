@@ -99,29 +99,29 @@ a {
 .hero-copy {
   position: relative;
   z-index: 2;
-  padding: 6rem 5rem;
+  padding: 4rem 4rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 
 .hero-logo {
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
 }
 .hero-logo img {
-  height: 110px; /* ALTERADO: era 36px no original → aumentado para 80px a pedido */
+  height: 90px;
   width: auto;
   display: block;
-  mix-blend-mode: screen; /* funde a logo com o fundo escuro */
+  mix-blend-mode: screen;
   filter: brightness(1.15);
 }
 
 .hero-h1 {
-  font-size: clamp(2.8rem, 5.2vw, 5rem);
+  font-size: clamp(2.2rem, 3.5vw, 4rem);
   font-weight: 300;
-  line-height: 1.08;
+  line-height: 1.1;
   letter-spacing: -.022em;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
 }
 .hero-h1 .accent {
   color: var(--gold);
@@ -132,16 +132,16 @@ a {
   width: 48px;
   height: 1px;
   background: var(--gold-line);
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
 }
 
 .hero-sub {
-  font-size: clamp(1rem, 1.5vw, 1.15rem);
+  font-size: clamp(1rem, 1.3vw, 1.1rem);
   font-weight: 300;
   color: var(--light);
   max-width: 440px;
-  line-height: 1.9;
-  margin-bottom: 2.5rem;
+  line-height: 1.8;
+  margin-bottom: 2rem;
 }
 
 /* Coluna direita do hero — vídeo VSL centralizado */
@@ -1034,8 +1034,24 @@ footer {
     grid-template-columns: 1fr;
   }
   .sim-controls {
+    padding: 1.5rem;
+    gap: 1.5rem;
     border-right: none;
     border-bottom: 1px solid var(--gold-line);
+  }
+  .sim-results {
+    padding: 1.5rem;
+  }
+  .sim-taxa-badge {
+    margin-bottom: 1.25rem;
+  }
+  .sim-main-result {
+    padding: 1.25rem 0;
+    margin-bottom: 1.25rem;
+  }
+  .sim-row {
+    flex-wrap: wrap;
+    gap: .2rem;
   }
 
   footer {
@@ -1053,5 +1069,30 @@ footer {
   }
   .litoral-stats {
     grid-template-columns: 1fr;
+  }
+
+  .sim-controls {
+    padding: 0.5rem;
+    gap: 1.25rem;
+  }
+  .sim-results {
+    padding: 1.1rem;
+  }
+  .sim-main-value {
+    font-size: clamp(1.8rem, 9vw, 2.4rem);
+  }
+  .sim-range-tick {
+    font-size: .70rem;
+  }
+  .sim-row-label {
+    font-size: .80rem;
+  }
+  .sim-row-value {
+    font-size: .88rem;
+    white-space: nowrap;
+  }
+  .sim-toggle {
+    font-size: .78rem;
+    padding: .75rem .3rem;
   }
 }
