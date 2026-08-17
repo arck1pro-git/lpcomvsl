@@ -26,6 +26,14 @@ function getUTMs() {
   };
 }
 
+/* ─── ID DE EVENTO (PIXEL DA META) ──────────────────────── */
+/* NOVO: gera um id único por conversão. Serve para deduplicar o evento caso
+   a Conversions API passe a enviar o mesmo Lead pelo servidor. */
+function novoEventId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'lead-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+}
+
 /* ─── SIMULADOR ─────────────────────────────────────────── */
 // ALTERADO: lógica de cálculo migrada do simulador oficial (arisimulador-main/script.js)
 
@@ -211,14 +219,11 @@ document.getElementById('tel').addEventListener('input', function () {
   this.value = masked;
 });
 
-/* ─── FORMULÁRIO → n8n WEBHOOK ──────────────────────────── */
-/* ALTERADO: substituída a função enviar() inline (que redirecionava para WhatsApp)
-   por envio via fetch para webhook n8n com todos os campos + UTMs */
+/* ─── FORMULÁRIO → SPRINTHUB WEBHOOK ────────────────────── */
+/* ALTERADO: destino migrado do webhook n8n para o hook do SprintHub.
+   Os nomes dos parâmetros seguem os campos esperados pelo SprintHub. */
 
-// ⚠️ Defina abaixo a URL do webhook do n8n antes de ir ao ar.
-// Para obter a URL: no n8n, crie um nó "Webhook", copie a URL gerada
-// e substitua a string abaixo.
-const WEBHOOK_URL = 'https://hostinger-n8n.fe8diu.easypanel.host/webhook/lp-lead-direto';
+const WEBHOOK_URL = 'https://sprinthub-api-master.sprinthub.app/api/hook/lparck1pro?i=arck1pro&access_token=s9matowcwH_jRUIuiRu3XgEJQJWhfim2dTVxlKSxLP_A-wg6fQ';
 
 document.getElementById('form-contato').addEventListener('submit', async function (e) {
   e.preventDefault();
@@ -235,44 +240,75 @@ document.getElementById('form-contato').addEventListener('submit', async functio
   feedback.hidden       = true;
   feedback.className    = 'form-feedback';
 
-  // NOVO: payload inclui todos os campos do formulário + UTMs + URL da página + timestamp + CTA de origem
-  var payload = Object.assign(
-    {
-      nome:           document.getElementById('nome').value.trim(),
-      telefone:       document.getElementById('tel').value.trim(),
-      email:          document.getElementById('email').value.trim(),
-      capital:        document.getElementById('capital-form').value,
-      modalidade:     document.getElementById('modalidade').value,
-      prazo_decisao:  document.getElementById('prazo-decisao').value,
-      profissao:      document.getElementById('profissao').value.trim(),
-      cta_origem:     ctaOrigem || 'direto', // seção do botão clicado antes de chegar ao formulário
-      pagina:         window.location.href,
-      timestamp:      new Date().toISOString(),
-    },
-    getUTMs()
-  );
+  // ALTERADO: os nomes abaixo são os slugs reais dos campos no SprintHub
+  // (confirmados pelo schema que a própria API devolve em caso de erro 400).
+  // Não renomear sem conferir no CRM — nome errado = campo chega vazio.
+  var utms = getUTMs();
+
+  var params = {
+    firstname:                  document.getElementById('nome').value.trim(),
+    email:                      document.getElementById('email').value.trim(),
+    whatsapp:                   document.getElementById('tel').value.trim(),
+    profissao:                  document.getElementById('profissao').value.trim(),
+    qual_o_valor_inicial_do_s:  document.getElementById('capital-form').value,
+    voce_ja_investe_em_alguma:  document.getElementById('modalidade').value,
+    voce_esta_pronto_para_inv:  document.getElementById('prazo-decisao').value,
+
+    // Atribuição
+    site_de_origem:  window.location.href,
+    utm_source:      utms.utm_source,
+    utm_medium:      utms.utm_medium,
+    utm_term:        utms.utm_term,
+    utm_content:     utms.utm_content,
+    utm_campaing:    utms.utm_campaign, // (sic) o campo no SprintHub está grafado "campaing"
+    cta_origem:      ctaOrigem || 'direto', // ainda sem campo correspondente no CRM
+  };
+
+  // ALTERADO: o hook do SprintHub lê os dados da QUERY STRING e ignora o corpo
+  // da requisição. Por isso os campos vão na URL, e não como JSON no body.
+  var query = new URLSearchParams();
+  Object.keys(params).forEach(function (k) {
+    if (params[k]) query.append(k, params[k]);
+  });
+
+  // A URL base já possui "?", então os campos são anexados com "&"
+  var url = WEBHOOK_URL + '&' + query.toString();
 
   try {
-    const response = await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    // Sem headers e sem body: assim a requisição é "simples" para o CORS
+    // e o navegador nem dispara o preflight OPTIONS.
+    const response = await fetch(url, { method: 'POST' });
 
-    if (response.status === 409) {
-      // Lead já cadastrado no Google Sheets — o n8n retornou 409
-      feedback.textContent = 'Seu contato já está em nossa base.';
-      feedback.classList.add('form-feedback--ok');
-      feedback.hidden = false;
-    } else if (!response.ok) {
-      throw new Error('HTTP ' + response.status);
-    } else {
-      // Sucesso — novo lead criado
-      feedback.textContent = 'Recebemos seu contato! Nossa equipe entra em contato em até 24h.';
-      feedback.classList.add('form-feedback--ok');
-      feedback.hidden = false;
-      this.reset();
+    // ALTERADO: 409 (lead já existente no CRM) segue o mesmo caminho do sucesso —
+    // do ponto de vista do usuário a conversão aconteceu do mesmo jeito.
+    if (!response.ok && response.status !== 409) {
+      // A API do SprintHub detalha o motivo no corpo da resposta (campo "msg")
+      var erro = await response.text().catch(function () { return ''; });
+      throw new Error('HTTP ' + response.status + ' — ' + erro);
     }
+
+    // NOVO: evento Lead do Pixel da Meta (id 2102101857297540)
+    if (typeof fbq === 'function') {
+      fbq('track', 'Lead', { content_name: 'Formulário ARI' }, { eventID: novoEventId() });
+    } else {
+      // Bloqueador de anúncios ou pixel não carregado — não impede o redirect
+      console.warn('[ARI] fbq indisponível: evento Lead não foi enviado.');
+    }
+
+    feedback.textContent = 'Recebemos seu contato! Redirecionando…';
+    feedback.classList.add('form-feedback--ok');
+    feedback.hidden = false;
+    this.reset(); // evita que o navegador restaure os valores ao voltar
+
+    // NOVO: redireciona para a página de confirmação.
+    // Caminho até o arquivo (e não até a pasta) para funcionar em qualquer
+    // ambiente — inclusive abrindo por file:// ou em servidor que não resolve
+    // o index.html de um diretório automaticamente.
+    // O atraso curto dá tempo do beacon do pixel sair antes da navegação —
+    // sem ele, o navegador pode cancelar a requisição do evento Lead.
+    setTimeout(function () {
+      window.location.assign('obrigado/index.html');
+    }, 600);
 
   } catch (err) {
     console.error('[ARI] Erro ao enviar formulário:', err);

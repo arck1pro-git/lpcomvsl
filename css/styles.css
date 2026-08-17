@@ -1096,3 +1096,132 @@ footer {
     padding: .75rem .3rem;
   }
 }
+
+/* ─── PÁGINA OBRIGADO ──────────────────────────────────── */
+/* NOVO: estilos da página de confirmação (/obrigado) */
+.obrigado-main {
+  display: flex;
+  align-items: center;
+  min-height: calc(100svh - 9rem); /* desconta a altura do rodapé */
+}
+
+.obrigado-section {
+  width: 100%;
+  text-align: center;
+}
+
+/* Selo de confirmação */
+.obrigado-badge {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 2rem;
+  border: 1px solid var(--gold-line);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  background: var(--gold-glow);
+  box-shadow: 0 0 0 10px rgba(194,143,80,0.04);
+}
+
+.obrigado-badge svg {
+  width: 34px;
+  height: 34px;
+}
+
+.obrigado-h1 {
+  max-width: 680px;
+  margin: 0 auto .85rem;
+}
+
+.obrigado-lead {
+  margin: 0 auto;
+  max-width: 520px;
+}
+
+.obrigado-lead strong {
+  color: var(--light);
+  font-weight: 500;
+}
+
+/* Próximos passos */
+.obrigado-steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  max-width: 900px;
+  margin: 3.5rem auto 0;
+  text-align: left;
+}
+
+.obrigado-step {
+  background: var(--light-06);
+  border: 1px solid var(--light-15);
+  border-top: 1px solid var(--gold-line);
+  padding: 1.75rem 1.6rem;
+}
+
+.obrigado-step-num {
+  display: block;
+  font-size: .75rem;
+  letter-spacing: .3em;
+  color: var(--gold);
+  margin-bottom: .85rem;
+}
+
+.obrigado-step-title {
+  font-size: .95rem;
+  font-weight: 500;
+  line-height: 1.4;
+  margin-bottom: .5rem;
+}
+
+.obrigado-step-text {
+  font-size: .85rem;
+  color: var(--light-70);
+  line-height: 1.75;
+  font-weight: 300;
+}
+
+/* Ações */
+.obrigado-actions {
+  margin-top: 3.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+@media (max-width: 960px) {
+  .obrigado-main {
+    min-height: auto;
+    padding: 1rem 0;
+  }
+  .obrigado-steps {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-top: 2.75rem;
+  }
+  .obrigado-actions {
+    margin-top: 2.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .obrigado-badge {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 1.5rem;
+  }
+  .obrigado-badge svg {
+    width: 28px;
+    height: 28px;
+  }
+  /* O botão ocupa a largura total para facilitar o toque */
+  .obrigado-actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
