@@ -203,17 +203,22 @@ document.querySelectorAll('.faq-btn').forEach(function (btn) {
   });
 });
 
-/* ─── MÁSCARA WHATSAPP: (XX) XXXXXXXXX, sem letras, sem espaços manuais ─ */
+/* ─── MÁSCARA WHATSAPP: (XX) XXXXX-XXXX, sem letras, sem espaços manuais ─ */
+/* ALTERADO: máscara agora inclui o hífen, batendo com o placeholder do campo. */
 document.getElementById('tel').addEventListener('input', function () {
   // Extrai apenas dígitos e limita a 11 (2 DDD + 9 número)
   var digits = this.value.replace(/\D/g, '').slice(0, 11);
 
-  // Reconstrói com máscara: (XX) XXXXXXXXX
+  // Reconstrói com máscara: (XX) XXXXX-XXXX no celular, (XX) XXXX-XXXX no fixo
   var masked = '';
   if (digits.length > 0) {
     masked = '(' + digits.slice(0, 2);
     if (digits.length > 2) {
-      masked += ') ' + digits.slice(2);
+      var corte = digits.length > 10 ? 5 : 4; // dígitos antes do hífen
+      masked += ') ' + digits.slice(2, 2 + corte);
+      if (digits.length > 2 + corte) {
+        masked += '-' + digits.slice(2 + corte);
+      }
     }
   }
   this.value = masked;
@@ -243,12 +248,16 @@ document.getElementById('form-contato').addEventListener('submit', async functio
   // ALTERADO: os nomes abaixo são os slugs reais dos campos no SprintHub
   // (confirmados pelo schema que a própria API devolve em caso de erro 400).
   // Não renomear sem conferir no CRM — nome errado = campo chega vazio.
+  // "nome" e "whatsapp" são obrigatórios: a API responde 400 sem eles.
   var utms = getUTMs();
 
   var params = {
-    firstname:                  document.getElementById('nome').value.trim(),
+    // ALTERADO: era "firstname", que a API rejeita com
+    // 400 "nome deve ser string, e é obrigatório" — nenhum lead entrava.
+    nome:                       document.getElementById('nome').value.trim(),
     email:                      document.getElementById('email').value.trim(),
-    whatsapp:                   document.getElementById('tel').value.trim(),
+    // ALTERADO: envia só os dígitos (11999999999); a máscara é só visual
+    whatsapp:                   document.getElementById('tel').value.replace(/\D/g, ''),
     profissao:                  document.getElementById('profissao').value.trim(),
     qual_o_valor_inicial_do_s:  document.getElementById('capital-form').value,
     voce_ja_investe_em_alguma:  document.getElementById('modalidade').value,
