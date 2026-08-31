@@ -230,6 +230,41 @@ document.getElementById('tel').addEventListener('input', function () {
 
 const WEBHOOK_URL = 'https://sprinthub-api-master.sprinthub.app/api/hook/lparck1pro?i=arck1pro&access_token=s9matowcwH_jRUIuiRu3XgEJQJWhfim2dTVxlKSxLP_A-wg6fQ';
 
+/* ─── CONFIRMAÇÃO DO WEBHOOK ────────────────────────────── */
+/* NOVO: o pixel só pode disparar depois que o SprintHub confirmar o envio.
+   Status 2xx sozinho não é confirmação: a API pode responder 200 e ainda
+   assim sinalizar a falha no corpo (slug de campo inválido, por exemplo).
+   Esta função concentra esse julgamento e devolve o motivo da recusa. */
+async function confirmarEnvio(response) {
+  // O corpo só pode ser lido uma vez — por isso é lido aqui, antes de tudo.
+  var corpo = await response.text().catch(function () { return ''; });
+
+  // 409 = lead já existente no CRM. O SprintHub recebeu e reconheceu o
+  // contato, então a conversão vale do mesmo jeito.
+  if (!response.ok && response.status !== 409) {
+    return { ok: false, motivo: 'HTTP ' + response.status + ' — ' + corpo };
+  }
+
+  // A API responde em JSON. Se o corpo trouxer um sinal explícito de falha,
+  // o envio NÃO está confirmado — mesmo que o status seja 200.
+  var dados = null;
+  try { dados = JSON.parse(corpo); } catch (e) { /* corpo vazio ou texto puro */ }
+
+  if (dados && typeof dados === 'object') {
+    var falhou =
+      dados.success === false ||
+      Boolean(dados.error) ||
+      (Array.isArray(dados.errors) && dados.errors.length > 0) ||
+      Number(dados.status || dados.statusCode || 0) >= 400;
+
+    if (falhou) {
+      return { ok: false, motivo: 'SprintHub recusou o envio — ' + corpo };
+    }
+  }
+
+  return { ok: true, motivo: '' };
+}
+
 document.getElementById('form-contato').addEventListener('submit', async function (e) {
   e.preventDefault();
 
@@ -288,15 +323,14 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     // e o navegador nem dispara o preflight OPTIONS.
     const response = await fetch(url, { method: 'POST' });
 
-    // ALTERADO: 409 (lead já existente no CRM) segue o mesmo caminho do sucesso —
-    // do ponto de vista do usuário a conversão aconteceu do mesmo jeito.
-    if (!response.ok && response.status !== 409) {
-      // A API do SprintHub detalha o motivo no corpo da resposta (campo "msg")
-      var erro = await response.text().catch(function () { return ''; });
-      throw new Error('HTTP ' + response.status + ' — ' + erro);
-    }
+    // ALTERADO: a confirmação do SprintHub é o portão de tudo o que vem
+    // depois — pixel, mensagem de sucesso e redirect. Sem confirmação,
+    // cai no catch e nenhum evento de conversão é disparado.
+    const envio = await confirmarEnvio(response);
+    if (!envio.ok) throw new Error(envio.motivo);
 
-    // NOVO: evento Lead do Pixel da Meta (id 2102101857297540)
+    // NOVO: evento Lead do Pixel da Meta (id 2102101857297540).
+    // ALTERADO: só chega aqui com o envio confirmado pelo SprintHub.
     if (typeof fbq === 'function') {
       fbq('track', 'Lead', { content_name: 'Formulário ARI' }, { eventID: novoEventId() });
     } else {
