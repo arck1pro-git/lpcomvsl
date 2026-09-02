@@ -34,6 +34,12 @@ function novoEventId() {
   return 'lead-' + Date.now() + '-' + Math.random().toString(16).slice(2);
 }
 
+/* NOVO: o Lead é o único evento que este site manda para o pixel, e ele vale
+   uma vez por conversão. Sem esta trava, um segundo submit — duplo clique antes
+   do redirect, ou nova tentativa depois de um erro — dispararia outro Lead, com
+   eventID diferente, que a Meta contaria como uma conversão nova. */
+var leadEnviado = false;
+
 /* ─── SIMULADOR ─────────────────────────────────────────── */
 // ALTERADO: lógica de cálculo migrada do simulador oficial (arisimulador-main/script.js)
 
@@ -329,11 +335,13 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     const envio = await confirmarEnvio(response);
     if (!envio.ok) throw new Error(envio.motivo);
 
-    // NOVO: evento Lead do Pixel da Meta (id 2102101857297540).
-    // ALTERADO: só chega aqui com o envio confirmado pelo SprintHub.
-    if (typeof fbq === 'function') {
+    // Evento Lead do Pixel da Meta (id 2102101857297540) — o único que o site
+    // envia ao pixel. Só chega aqui com o envio confirmado pelo SprintHub, e a
+    // trava garante um disparo por visita.
+    if (typeof fbq === 'function' && !leadEnviado) {
       fbq('track', 'Lead', { content_name: 'Formulário ARI' }, { eventID: novoEventId() });
-    } else {
+      leadEnviado = true;
+    } else if (typeof fbq !== 'function') {
       // Bloqueador de anúncios ou pixel não carregado — não impede o redirect
       console.warn('[ARI] fbq indisponível: evento Lead não foi enviado.');
     }
@@ -359,7 +367,9 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     feedback.classList.add('form-feedback--err');
     feedback.hidden = false;
 
-  } finally {
+    // ALTERADO: o botão só é reabilitado quando o envio falha. No sucesso ele
+    // fica travado até o redirect — antes, o `finally` o liberava e abria uma
+    // janela de 600 ms em que um segundo clique disparava outro Lead.
     submitBtn.disabled    = false;
     submitBtn.textContent = 'Quero investir no ARI';
   }

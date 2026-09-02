@@ -44,9 +44,12 @@
 <!-- End Google Tag Manager -->
 
   <!-- Meta Pixel Code -->
-  <!-- NOVO: pixel 2102101857297540. Aqui só o PageView. O evento Lead é
-       disparado em js/main.js e SOMENTE quando o webhook do SprintHub
-       confirma o recebimento do lead — nunca no clique do botão. -->
+  <!-- ALTERADO: o pixel 2102101857297540 não dispara mais PageView. O ÚNICO
+       evento enviado é o Lead, em js/main.js, e somente quando o webhook do
+       SprintHub confirma o recebimento — nunca no clique do botão.
+       O init continua obrigatório: sem ele o fbq('track','Lead') não sai.
+       autoConfig=false desliga os eventos automáticos da Meta (cliques em
+       botão, microdados), que entrariam sem passar por este código. -->
 <script>
 !function(f,b,e,v,n,t,s)
 {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -56,12 +59,9 @@ n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
+fbq('set', 'autoConfig', false, '2102101857297540');
 fbq('init', '2102101857297540');
-fbq('track', 'PageView');
 </script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=2102101857297540&ev=PageView&noscript=1"
-alt=""/></noscript>
   <!-- End Meta Pixel Code -->
 
   <!-- ─── Dados Estruturados (Schema.org) ──────────────── -->
