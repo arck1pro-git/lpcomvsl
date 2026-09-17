@@ -4,25 +4,35 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- ─── SEO Principal ─────────────────────────────────── -->
   <title>ARI — Ativo de Renda Imobiliária | Arck1Pro</title>
-  <meta name="description" content="O ARI (Ativo de Renda Imobiliária) é uma participação em SCP estruturada pela Arck1Pro no litoral de Santa Catarina. Rendimento de até 3% ao mês, isento de IR, com garantia real de 200% em ativos imobiliários registrados em cartório.">
-  <meta name="robots" content="index, follow">
-  <!-- Substitua pela URL real do site após publicar -->
-  <!-- <link rel="canonical" href="https://URL_DO_SITE_AQUI/"> -->
 
-  <!-- ─── Open Graph (WhatsApp, LinkedIn, Facebook) ──────── -->
-  <meta property="og:type"        content="website">
-  <meta property="og:locale"      content="pt_BR">
-  <meta property="og:site_name"   content="ARI — Arck1Pro">
-  <meta property="og:title"       content="ARI — Ativo de Renda Imobiliária | Arck1Pro">
-  <meta property="og:description" content="Participação em SCP com retorno de até 3% ao mês, isento de IR e garantia real de 200%. Estruturado pela Arck1Pro no litoral de Santa Catarina.">
+  <!-- Meta Pixel Code -->
+  <!-- Única tag de rastreamento do site — não há GTM, GA nem qualquer outro
+       contêiner que possa disparar um segundo evento com este mesmo ID.
 
+       Fica no topo do head de propósito: quanto antes o fbevents.js carregar,
+       menor a chance de o Lead sair apenas enfileirado no stub do fbq, que é a
+       maior fonte de divergência entre o CRM e o Gerenciador de Anúncios.
 
-  <!-- ─── Twitter Card ──────────────────────────────────── -->
-  <meta name="twitter:card"        content="summary_large_image">
-  <meta name="twitter:title"       content="ARI — Ativo de Renda Imobiliária | Arck1Pro">
-  <meta name="twitter:description" content="Até 3% ao mês, isento de IR, no litoral de Santa Catarina. Garantia real de 200%. Estruturado pela Arck1Pro.">
+       Sem PageView e sem a tag de fallback sem-JS: o único evento é o Lead, disparado
+       em js/main.js depois que o SprintHub confirma a criação do contato, uma
+       vez por lead, com eventID estável.
+       autoConfig=false impede a Meta de detectar e registrar eventos por conta
+       própria (clique em botão, metadados da página) — era por aí que entrava
+       Lead fantasma que ninguém consegue reconciliar. -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('set', 'autoConfig', false, '2102101857297540');
+fbq('init', '2102101857297540');
+</script>
+  <!-- End Meta Pixel Code -->
 
   <!-- ─── Favicon ────────────────────────────────────────── -->
   <link rel="icon"             type="image/webp" href="img/ARI.webp">
@@ -38,58 +48,8 @@
 
   <!-- ─── CSS ──────────────────────────────────────────── -->
   <link rel="stylesheet" href="css/styles.css">
-
-  <!-- Google Tag Manager -->
-<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s);j.async=true;j.src="https://load.tss.arck1pro.com.br/7msfshruhgdg.js?"+i;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','8t=DgBaLyE%2FRUY%2FPFFeMyQmVRFZVUZEVAwdWgUVCx5DGAEISgQHGFwKAQ%3D%3D');</script>
-<!-- End Google Tag Manager -->
-
-  <!-- Meta Pixel Code -->
-  <!-- Única fonte de PageView do site: a página de obrigado não carrega o
-       pixel, e o contêiner GTM não pode ter tag Meta com este mesmo ID.
-       O Lead fica em js/main.js, só com o envio confirmado e uma vez por visita.
-       autoConfig=false impede a Meta de registrar eventos por conta própria. -->
-<script>
-!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window, document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('set', 'autoConfig', false, '2102101857297540');
-fbq('init', '2102101857297540');
-fbq('track', 'PageView');
-</script>
-<noscript><img height="1" width="1" style="display:none"
-src="https://www.facebook.com/tr?id=2102101857297540&ev=PageView&noscript=1"
-alt=""/></noscript>
-  <!-- End Meta Pixel Code -->
-
-  <!-- ─── Dados Estruturados (Schema.org) ──────────────── -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "FinancialProduct",
-    "name": "ARI — Ativo de Renda Imobiliária",
-    "description": "Participação em SCP (Sociedade em Conta de Participação) com retorno de até 3% ao mês, isento de IR, e garantia real de 200% em ativos imobiliários registrados em cartório, no litoral de Santa Catarina.",
-    "provider": {
-      "@type": "Organization",
-      "name": "Arck1Pro",
-      "description": "Hub de estruturação imobiliária com mais de 20 anos de atuação no litoral catarinense."
-    },
-    "areaServed": {
-      "@type": "State",
-      "name": "Santa Catarina",
-      "containedInPlace": { "@type": "Country", "name": "Brasil" }
-    }
-  }
-  </script>
 </head>
 <body>
-  <!-- Google Tag Manager (noscript) -->
-<noscript><iframe src="https://load.tss.arck1pro.com.br/ns.html?id=GTM-5XX66FVN" height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
-<!-- End Google Tag Manager (noscript) -->
 
 <main id="conteudo">
 
