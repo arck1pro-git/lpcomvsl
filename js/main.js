@@ -164,10 +164,27 @@ function obterConversao(chave) {
   return reg;
 }
 
+/* ─── CORRESPONDÊNCIA AVANÇADA ──────────────────────────── */
+/* E-mail e telefone seguem com o Lead para a Meta casar o evento com a
+   conta de quem converteu. O pixel aplica SHA-256 no navegador antes de
+   enviar: o dado em texto puro não sai para a Meta. Também não é gravado
+   no localStorage — só passa por aqui na hora do disparo.
+   Formato pedido pela Meta: e-mail minúsculo e sem espaços; telefone com
+   DDI 55 + DDD + número, só dígitos. */
+var PIXEL_ID = '2102101857297540'; // o mesmo do fbq('init') no index.html
+
+function dadosCorrespondencia(email, whatsapp) {
+  var dados = {};
+  var em = String(email || '').trim().toLowerCase();
+  if (em)       dados.em = em;
+  if (whatsapp) dados.ph = '55' + whatsapp;
+  return dados;
+}
+
 /* ─── ÚNICO PONTO DE DISPARO DO LEAD ────────────────────── */
 /* Nenhum outro lugar do projeto pode chamar fbq('track', 'Lead').
    Só é invocada depois da confirmação do SprintHub. */
-function dispararLead(chave, reg) {
+function dispararLead(chave, reg, correspondencia) {
   if (reg.meta_lead_enviado) {
     logConv('Lead já enviado antes — nenhum evento novo', reg);
     return;
@@ -178,6 +195,9 @@ function dispararLead(chave, reg) {
     return;
   }
 
+  // Um novo init do MESMO pixel só anexa os dados de correspondência ao
+  // pixel já carregado; não dispara evento. O Lead logo abaixo sai com eles.
+  fbq('init', PIXEL_ID, correspondencia);
   fbq('track', 'Lead', { content_name: 'Formulário ARI' }, { eventID: reg.event_id });
 
   // fbq.callMethod só existe depois que o fbevents.js carrega de fato. Sem
@@ -610,7 +630,7 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     // Confirmado pelo CRM: unico ponto do projeto autorizado a contabilizar a
     // conversao. Toda a decisao de disparar ou nao esta em dispararLead().
     logConv('SprintHub confirmou a criacao do lead', conversao.event_id);
-    dispararLead(whatsapp, conversao);
+    dispararLead(whatsapp, conversao, dadosCorrespondencia(params.email, whatsapp));
 
     feedback.textContent = 'Recebemos seu contato! Redirecionando…';
     feedback.classList.add('form-feedback--ok');

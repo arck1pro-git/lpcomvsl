@@ -14,9 +14,12 @@
        menor a chance de o Lead sair apenas enfileirado no stub do fbq, que é a
        maior fonte de divergência entre o CRM e o Gerenciador de Anúncios.
 
-       Sem PageView e sem a tag de fallback sem-JS: o único evento é o Lead, disparado
-       em js/main.js depois que o SprintHub confirma a criação do contato, uma
-       vez por lead, com eventID estável.
+       PageView dispara no carregamento: sem ele a Meta não mede visualização
+       da página de destino nem monta público de quem visitou a LP. Não conta
+       como conversão. Sem a tag de fallback sem-JS.
+       O único evento de conversão é o Lead, disparado em js/main.js depois
+       que o SprintHub confirma a criação do contato, uma vez por lead, com
+       eventID estável.
        autoConfig=false impede a Meta de detectar e registrar eventos por conta
        própria (clique em botão, metadados da página) — era por aí que entrava
        Lead fantasma que ninguém consegue reconciliar. -->
@@ -31,6 +34,7 @@ s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
 fbq('set', 'autoConfig', false, '2102101857297540');
 fbq('init', '2102101857297540');
+fbq('track', 'PageView');
 </script>
   <!-- End Meta Pixel Code -->
 
