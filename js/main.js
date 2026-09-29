@@ -566,18 +566,29 @@ async function confirmarEnvio(response) {
 /* ─── FILTRO DE ROBÔ ────────────────────────────────────── */
 /* NOVO: dois sinais que não custam nada a quem preenche de verdade:
    - honeypot: campo fora da tela (index.html) que só robô preenche;
-   - tempo mínimo: ninguém rola até o fim, preenche sete campos e escolhe
-     três opções em menos de 3 s — robô envia assim que a página abre.
+   - tempo mínimo: ninguém preenche sete campos e escolhe três opções em
+     menos de 3 s — robô preenche tudo de uma vez.
+   O relógio começa no primeiro contato com o formulário, não na abertura
+   da página: a LP demora a terminar de carregar (vídeo, imagens) e o robô
+   que espera o carregamento completo passaria folgado pelos 3 s.
    reCAPTCHA ficou de fora: o token precisa ser conferido num servidor com
    a chave secreta, e esta LP não tem um. Conferido só no navegador, o
    robô pularia a checagem. */
 var TEMPO_MINIMO_ENVIO_MS = 3000;
 var paginaAbertaEm        = Date.now();
+var formIniciadoEm        = 0;
+
+['focusin', 'input', 'change'].forEach(function (tipo) {
+  document.getElementById('form-contato').addEventListener(tipo, function () {
+    if (!formIniciadoEm) formIniciadoEm = Date.now();
+  });
+});
 
 function motivoRobo() {
   if (document.getElementById('site-empresa').value) return 'honeypot preenchido';
-  var decorrido = Date.now() - paginaAbertaEm;
-  if (decorrido < TEMPO_MINIMO_ENVIO_MS) return 'enviado ' + decorrido + ' ms após abrir a página';
+  // Valor posto por script, sem evento nenhum: sobra a abertura da página
+  var decorrido = Date.now() - (formIniciadoEm || paginaAbertaEm);
+  if (decorrido < TEMPO_MINIMO_ENVIO_MS) return 'formulário preenchido em ' + decorrido + ' ms';
   return '';
 }
 
