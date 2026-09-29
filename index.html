@@ -592,6 +592,16 @@ fbq('track', 'PageView');
               autocomplete="organization-title">
           </div>
 
+          <!-- NOVO: armadilha para robôs (honeypot). Fica fora da tela, fora da
+               ordem do Tab e escondida do leitor de tela: pessoa nenhuma
+               preenche. Robô preenche todo campo que encontra, e o envio é
+               descartado em js/main.js sem ir ao CRM nem disparar o Lead.
+               Nome sem categoria de autopreenchimento de propósito. -->
+          <div class="form-hp" aria-hidden="true">
+            <label for="site-empresa">Não preencha este campo</label>
+            <input type="text" id="site-empresa" name="site_empresa" tabindex="-1" autocomplete="off">
+          </div>
+
           <div id="form-feedback" class="form-feedback" role="alert" aria-live="polite" hidden></div>
 
           <button type="submit" class="btn form-submit">Quero investir no ARI</button>

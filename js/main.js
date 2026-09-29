@@ -119,7 +119,11 @@ function lerCookie(nome) {
    Efeito: recarregar a página, voltar do /obrigado, reenviar o mesmo
    formulário ou tentar de novo depois de um erro reaproveitam o MESMO
    event_id e não geram um segundo Lead. Um lead de fato diferente tem
-   outra chave e é contado normalmente. */
+   outra chave e é contado normalmente.
+
+   O e-mail é a segunda âncora: quem reenvia corrigindo só o telefone cai
+   na conversão que já existe e não vira um segundo Lead. Do e-mail só o
+   hash SHA-256 fica gravado, nunca o texto. */
 function novoEventId() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return 'lead-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -142,10 +146,39 @@ function gravarConversao(chave, registro) {
   storeGravar(STORE_CONVERSOES, todas);
 }
 
+/* SHA-256 em hexadecimal. crypto.subtle só existe em https; fora dele
+   devolve '' e a checagem pelo e-mail simplesmente não acontece. */
+async function sha256(texto) {
+  try {
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
+    return Array.from(new Uint8Array(buf)).map(function (b) {
+      return b.toString(16).padStart(2, '0');
+    }).join('');
+  } catch (e) {
+    return '';
+  }
+}
+
+/* Chave da conversão: o WhatsApp em dígitos. Se o número é novo mas o
+   e-mail já converteu neste navegador, é a mesma pessoa corrigindo o
+   telefone — vale a chave antiga, e com ela o event_id antigo. */
+function localizarChave(whatsapp, emailHash) {
+  var todas = lerConversoes();
+  if (todas[whatsapp] || !emailHash) return whatsapp;
+
+  for (var k in todas) {
+    if (todas[k] && todas[k].email_hash === emailHash) {
+      logConv('mesmo e-mail com outro telefone — mesma conversão', k);
+      return k;
+    }
+  }
+  return whatsapp;
+}
+
 /* Devolve o registro da conversão, criando um na primeira vez. O event_id
    nasce aqui e nunca muda para a mesma chave — é o que impede um retry de
    virar uma segunda conversão. */
-function obterConversao(chave) {
+function obterConversao(chave, emailHash) {
   var reg = lerConversoes()[chave];
 
   if (reg && reg.event_id) {
@@ -155,6 +188,7 @@ function obterConversao(chave) {
 
   reg = {
     event_id:             novoEventId(),
+    email_hash:           emailHash || '',
     criado_em:            new Date().toISOString(),
     meta_lead_enviado:    false,
     meta_lead_enviado_em: ''
@@ -529,6 +563,42 @@ async function confirmarEnvio(response) {
   return { ok: true, motivo: '' };
 }
 
+/* ─── FILTRO DE ROBÔ ────────────────────────────────────── */
+/* NOVO: dois sinais que não custam nada a quem preenche de verdade:
+   - honeypot: campo fora da tela (index.html) que só robô preenche;
+   - tempo mínimo: ninguém rola até o fim, preenche sete campos e escolhe
+     três opções em menos de 3 s — robô envia assim que a página abre.
+   reCAPTCHA ficou de fora: o token precisa ser conferido num servidor com
+   a chave secreta, e esta LP não tem um. Conferido só no navegador, o
+   robô pularia a checagem. */
+var TEMPO_MINIMO_ENVIO_MS = 3000;
+var paginaAbertaEm        = Date.now();
+
+function motivoRobo() {
+  if (document.getElementById('site-empresa').value) return 'honeypot preenchido';
+  var decorrido = Date.now() - paginaAbertaEm;
+  if (decorrido < TEMPO_MINIMO_ENVIO_MS) return 'enviado ' + decorrido + ' ms após abrir a página';
+  return '';
+}
+
+/* Mensagem de sucesso + redirect. É a mesma para lead real e para robô
+   barrado: o robô não descobre que foi filtrado. */
+function concluirComSucesso(form, feedback) {
+  feedback.textContent = 'Recebemos seu contato! Redirecionando…';
+  feedback.classList.add('form-feedback--ok');
+  feedback.hidden = false;
+  form.reset(); // evita que o navegador restaure os valores ao voltar
+
+  // Caminho até o arquivo (e não até a pasta) para funcionar em qualquer
+  // ambiente — inclusive abrindo por file:// ou em servidor que não resolve
+  // o index.html de um diretório automaticamente.
+  // O atraso curto dá tempo do beacon do pixel sair antes da navegação —
+  // sem ele, o navegador pode cancelar a requisição do evento Lead.
+  setTimeout(function () {
+    window.location.assign('obrigado/index.html');
+  }, 600);
+}
+
 /* NOVO: ao limpar o formulário (sucesso do envio) o erro do telefone sai junto */
 document.getElementById('form-contato').addEventListener('reset', function () {
   telEl.setCustomValidity('');
@@ -557,21 +627,33 @@ document.getElementById('form-contato').addEventListener('submit', async functio
   feedback.hidden       = true;
   feedback.className    = 'form-feedback';
 
+  // NOVO: envio de robô não vai ao CRM nem conta como Lead
+  var robo = motivoRobo();
+  if (robo) {
+    logConv('envio descartado como robô', robo);
+    concluirComSucesso(this, feedback);
+    return;
+  }
+
   // ALTERADO: os nomes abaixo são os slugs reais dos campos no SprintHub
   // (confirmados pelo schema que a própria API devolve em caso de erro 400).
   // Não renomear sem conferir no CRM — nome errado = campo chega vazio.
   // "nome" e "whatsapp" são obrigatórios: a API responde 400 sem eles.
-  // Chave da conversao: WhatsApp em digitos. E por ela que o registro de
+  // Chave da conversao: WhatsApp em digitos, ou a chave antiga quando o
+  // e-mail ja converteu neste navegador. E por ela que o registro de
   // idempotencia reconhece um envio repetido do MESMO lead.
   var whatsapp  = document.getElementById('tel').value.replace(/\D/g, '');
-  var conversao = obterConversao(whatsapp);
-  logConv('formulario recebido', { chave: whatsapp, event_id: conversao.event_id });
+  var email     = document.getElementById('email').value.trim();
+  var emailHash = await sha256(email.toLowerCase());
+  var chave     = localizarChave(whatsapp, emailHash);
+  var conversao = obterConversao(chave, emailHash);
+  logConv('formulario recebido', { chave: chave, event_id: conversao.event_id });
 
   var params = {
     // ALTERADO: era "firstname", que a API rejeita com
     // 400 "nome deve ser string, e é obrigatório" — nenhum lead entrava.
     nome:                       document.getElementById('nome').value.trim(),
-    email:                      document.getElementById('email').value.trim(),
+    email:                      email,
     // ALTERADO: envia só os dígitos (11999999999); a máscara é só visual
     whatsapp:                   whatsapp,
     profissao:                  document.getElementById('profissao').value.trim(),
@@ -630,22 +712,9 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     // Confirmado pelo CRM: unico ponto do projeto autorizado a contabilizar a
     // conversao. Toda a decisao de disparar ou nao esta em dispararLead().
     logConv('SprintHub confirmou a criacao do lead', conversao.event_id);
-    dispararLead(whatsapp, conversao, dadosCorrespondencia(params.email, whatsapp));
+    dispararLead(chave, conversao, dadosCorrespondencia(email, whatsapp));
 
-    feedback.textContent = 'Recebemos seu contato! Redirecionando…';
-    feedback.classList.add('form-feedback--ok');
-    feedback.hidden = false;
-    this.reset(); // evita que o navegador restaure os valores ao voltar
-
-    // NOVO: redireciona para a página de confirmação.
-    // Caminho até o arquivo (e não até a pasta) para funcionar em qualquer
-    // ambiente — inclusive abrindo por file:// ou em servidor que não resolve
-    // o index.html de um diretório automaticamente.
-    // O atraso curto dá tempo do beacon do pixel sair antes da navegação —
-    // sem ele, o navegador pode cancelar a requisição do evento Lead.
-    setTimeout(function () {
-      window.location.assign('obrigado/index.html');
-    }, 600);
+    concluirComSucesso(this, feedback);
 
   } catch (err) {
     // O event_id fica gravado e sem marca de envio: a proxima tentativa
