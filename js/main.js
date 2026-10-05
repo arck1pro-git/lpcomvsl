@@ -470,44 +470,47 @@ telEl.addEventListener('blur',   function () { validarTel(true); });
 const WEBHOOK_URL = 'https://sprinthub-api-master.sprinthub.app/api/hook/lparck1pro?i=arck1pro&access_token=s9matowcwH_jRUIuiRu3XgEJQJWhfim2dTVxlKSxLP_A-wg6fQ';
 
 /* NOVO: ao limpar o formulário (sucesso do envio) o erro do telefone sai junto */
-document.getElementById('form-contato').addEventListener('reset', function () {
+document.getElementById('formulario').addEventListener('reset', function () {
   telEl.setCustomValidity('');
   limparErroTel();
 });
 
 /* ─── FORMULÁRIO TRAVADO APÓS O ENVIO ───────────────────── */
-/* Campos e botão desabilitados, botão com "Dados enviados". `aviso` é a
-   mensagem que fica acima do botão; vazio mantém a que já está lá. */
-function travarFormulario(aviso) {
-  var form     = document.getElementById('form-contato');
+/* No lugar dos campos fica a mensagem de confirmação, com o botão
+   "Dados enviados" travado embaixo. Vale logo após o envio e em toda
+   volta à página dentro da janela da trava. `rolar` só no envio: ao abrir
+   a página, levar a pessoa até o formulário seria um salto sem motivo. */
+var MSG_ENVIADO = 'Recebemos seus dados! Um especialista da Arck1Pro vai falar com você pelo WhatsApp em até 24 horas úteis.';
+
+function travarFormulario(rolar) {
+  var form     = document.getElementById('formulario');
   var btn      = form.querySelector('[type="submit"]');
   var feedback = document.getElementById('form-feedback');
 
+  form.classList.add('form--enviado');
   Array.prototype.forEach.call(form.elements, function (el) { el.disabled = true; });
   btn.textContent = 'Dados enviados ✓';
   btn.classList.add('form-submit--enviado');
 
-  if (aviso) {
-    feedback.textContent = aviso;
-    feedback.className   = 'form-feedback form-feedback--ok';
-    feedback.hidden      = false;
-  }
+  feedback.textContent = MSG_ENVIADO;
+  feedback.className   = 'form-feedback form-feedback--ok';
+  feedback.hidden      = false;
+
+  if (rolar) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-var AVISO_JA_ENVIADO = 'Já recebemos seus dados. Nossa equipe vai falar com você pelo WhatsApp.';
-
-// Ao abrir a página e ao voltar do /obrigado pelo botão "voltar" — que
-// pode restaurar a página da memória sem rodar este script de novo.
-if (envioRecente()) travarFormulario(AVISO_JA_ENVIADO);
+// Ao abrir a página e ao voltar a ela pelo botão "voltar" — que pode
+// restaurar a página da memória sem rodar este script de novo.
+if (envioRecente()) travarFormulario(false);
 window.addEventListener('pageshow', function (e) {
-  if (e.persisted && envioRecente()) travarFormulario(AVISO_JA_ENVIADO);
+  if (e.persisted && envioRecente()) travarFormulario(false);
 });
 
-document.getElementById('form-contato').addEventListener('submit', async function (e) {
+document.getElementById('formulario').addEventListener('submit', async function (e) {
   e.preventDefault();
 
   // Já enviou neste aparelho: nada vai ao CRM nem à Meta.
-  if (envioRecente()) { travarFormulario(AVISO_JA_ENVIADO); return; }
+  if (envioRecente()) { travarFormulario(true); return; }
 
   // NOVO: portão do telefone. Marca a mensagem embaixo do campo e deixa o
   // número inválido para a validação nativa — nada é enviado sem os
@@ -544,7 +547,6 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     email:                      email,
     // ALTERADO: envia só os dígitos (11999999999); a máscara é só visual
     whatsapp:                   whatsapp,
-    profissao:                  document.getElementById('profissao').value.trim(),
     qual_o_valor_inicial_do_s:  document.getElementById('capital-form').value,
     voce_ja_investe_em_alguma:  document.getElementById('modalidade').value,
     voce_esta_pronto_para_inv:  document.getElementById('prazo-decisao').value,
@@ -601,17 +603,10 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     marcarEnvio();
     dispararLead(eventId, dadosCorrespondencia(params.nome, email, whatsapp));
 
+    // Sem redirect para o /obrigado: a confirmação aparece no lugar do
+    // formulário, e o beacon do pixel sai sem risco de a navegação cortá-lo.
     this.reset(); // evita que o navegador restaure os valores ao voltar
-    travarFormulario('Recebemos seu contato! Redirecionando…');
-
-    // Caminho até o arquivo (e não até a pasta) para funcionar em qualquer
-    // ambiente — inclusive abrindo por file:// ou em servidor que não resolve
-    // o index.html de um diretório automaticamente.
-    // O atraso curto dá tempo do beacon do pixel sair antes da navegação —
-    // sem ele, o navegador pode cancelar a requisição do evento Lead.
-    setTimeout(function () {
-      window.location.assign('obrigado/index.html');
-    }, 600);
+    travarFormulario(true);
 
   } catch (err) {
     console.error('[ARI] Erro ao enviar formulario:', err);
@@ -619,8 +614,8 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     feedback.classList.add('form-feedback--err');
     feedback.hidden = false;
 
-    // O botão só volta no erro. No sucesso fica travado até o redirect — o
-    // `finally` anterior o liberava e abria 600 ms para um segundo clique.
+    // O botão só volta no erro. No sucesso ele vira "Dados enviados" e
+    // fica travado.
     submitBtn.disabled    = false;
     submitBtn.textContent = 'Quero investir no ARI';
   }

@@ -144,29 +144,25 @@ a {
   margin-bottom: 2rem;
 }
 
-/* Coluna direita do hero — vídeo VSL centralizado */
+/* Coluna direita do hero — foto do litoral ocupando a coluna (desktop) */
 .hero-img-box {
   position: relative;
   overflow: hidden;
   clip-path: polygon(8% 0, 100% 0, 100% 100%, 0% 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 2rem 2rem 6rem;
-  background: var(--surface-2);
 }
 
-.hero-video {
+.hero-img-box img {
   width: 100%;
-  aspect-ratio: 16 / 9;
-  border: 0;
+  height: 100%;
+  object-fit: cover;
   display: block;
-  border-radius: 6px;
 }
 
-.hero-video-inline {
-  display: none;
+/* Botão logo abaixo da headline — visível na primeira tela do celular */
+.hero-cta {
+  margin-bottom: 1.75rem;
 }
+
 
 /* ─── BOTÕES ────────────────────────────────────────────── */
 .btn {
@@ -794,6 +790,16 @@ input[type="range"]::-moz-range-thumb {
   text-align: left;
 }
 
+/* Os botões levam direto ao form; a folga evita os campos colados na borda */
+#formulario {
+  scroll-margin-top: 2rem;
+}
+
+/* Envio concluído: os campos saem, ficam a mensagem e o botão "Dados enviados" */
+.form--enviado .form-row {
+  display: none;
+}
+
 .form-row {
   margin-bottom: 1.35rem;
 }
@@ -900,7 +906,7 @@ footer {
   flex-wrap: wrap;
 }
 
-/* ALTERADO: substituído span de texto pelo bloco logos + redes sociais */
+/* Bloco de logos do rodapé (sem links de saída) */
 .footer-brand-block {
   display: flex;
   flex-direction: column;
@@ -935,33 +941,6 @@ footer {
   flex-shrink: 0;
 }
 
-/* NOVO: ícones de redes sociais */
-.footer-social {
-  display: flex;
-  gap: .75rem;
-}
-
-.footer-social-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--gold-line);
-  color: var(--light-40);
-  transition: color .22s, border-color .22s;
-}
-
-.footer-social-link svg {
-  width: 16px;
-  height: 16px;
-}
-
-.footer-social-link:hover {
-  color: var(--gold);
-  border-color: var(--gold);
-}
-
 .footer-legal {
   font-size: .82rem;
   color: var(--light-40);
@@ -994,22 +973,6 @@ footer {
 
   .hero-img-box {
     display: none;
-  }
-
-  .hero-video-inline {
-    display: block;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    border-radius: 6px;
-    overflow: hidden;
-    margin: 1.5rem 0;
-  }
-
-  .hero-video-inline iframe {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    display: block;
   }
 
   .litoral-grid {

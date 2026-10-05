@@ -42,9 +42,6 @@ fbq('track', 'PageView');
   <link rel="icon"             type="image/webp" href="img/ARI.webp">
   <link rel="apple-touch-icon"                   href="img/ARI.webp">
 
-  <!-- ─── Preload de imagens críticas ─────────────────────── -->
-  <link rel="preload" as="image" href="img/porto-belo.webp">
-
   <!-- ─── Fontes ────────────────────────────────────────── -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -64,7 +61,7 @@ fbq('track', 'PageView');
       <div class="hero-copy">
 
         <div class="hero-logo">
-          <img src="img/ARI.webp" alt="ARI — Arck1Pro" width="180" height="48">
+          <img src="img/ARI.webp" alt="ARI — Arck1Pro" width="480" height="270">
         </div>
 
         <h1 class="hero-h1" id="hero-titulo">
@@ -74,42 +71,34 @@ fbq('track', 'PageView');
           <span class="accent">Isento de IR.</span>
         </h1>
 
-        <div class="hero-divider" aria-hidden="true"></div>
+        <!-- Logo abaixo da headline, para caber na primeira tela do celular.
+             Não usar "quero saber mais" em nenhum texto clicável da página: uma
+             regra do Gerenciador de Eventos (criada em 27/05/2026, vale para
+             todo site deste pixel) transforma cada clique nesse texto em
+             Lead. O único Lead da LP é o do envio do formulário. -->
+        <a href="#formulario" class="btn hero-cta" data-cta="hero">Quero investir no ARI</a>
 
-        <!-- Vídeo VSL — visível apenas em mobile, entre o título e o subtexto -->
-        <div class="hero-video-inline">
-          <iframe
-            src="https://www.youtube.com/embed/Jdh1k9ubrlU?rel=0&modestbranding=1"
-            title="ARI — Ativo de Renda Imobiliária"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen
-            loading="lazy">
-          </iframe>
-        </div>
+        <div class="hero-divider" aria-hidden="true"></div>
 
         <p class="hero-sub">
           Capital estruturado com garantia real de 200% em ativos imobiliários
           registrados em cartório, sem depender da bolsa, sem surpresa de IR.
         </p>
 
-        <!-- Não usar "quero saber mais" em nenhum texto clicável da página: uma
-             regra do Gerenciador de Eventos (criada em 27/05/2026, vale para
-             todo site deste pixel) transforma cada clique nesse texto em
-             Lead. O único Lead da LP é o do envio do formulário. -->
-        <a href="#formulario" class="btn" data-cta="hero">Quero investir no ARI</a>
-
       </div>
 
-      <!-- Coluna direita — Vídeo VSL -->
-      <div class="hero-img-box" role="region" aria-label="Vídeo de apresentação do ARI">
-        <iframe
-          class="hero-video"
-          src="https://www.youtube.com/embed/Jdh1k9ubrlU?rel=0&modestbranding=1"
-          title="ARI — Ativo de Renda Imobiliária"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowfullscreen
-          loading="lazy">
-        </iframe>
+      <!-- Coluna direita — foto do litoral, só no desktop. No celular a
+           coluna some (CSS) e o <picture> entrega um pixel vazio no lugar da
+           foto: nada é baixado. -->
+      <div class="hero-img-box">
+        <picture>
+          <source media="(min-width: 961px)" srcset="img/hero-porto-belo.webp">
+          <img
+            src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
+            alt="Vista aérea do litoral de Porto Belo, Santa Catarina"
+            width="1400" height="933"
+            fetchpriority="high">
+        </picture>
       </div>
 
     </section>
@@ -199,13 +188,16 @@ fbq('track', 'PageView');
       <div class="litoral-grid">
 
         <!-- Imagem do litoral — ocupa toda a altura da coluna esquerda -->
-        <!-- Coloque uma foto da orla em images/porto-belo-costa.jpg -->
+        <!-- Fora da primeira tela: carrega só quando a pessoa rola até aqui.
+             1600 px cobre a coluna em tela retina; o original tinha 8064 px e
+             39 MB, e era pré-carregado no topo com prioridade alta. -->
         <div class="litoral-img-box">
           <img
-            src="img/porto-belo.webp"
+            src="img/porto-belo-1600.webp"
             alt="Vista aérea do litoral de Porto Belo, Santa Catarina"
-            width="800" height="600"
-            fetchpriority="high">
+            width="1600" height="900"
+            loading="lazy"
+            decoding="async">
           <div class="litoral-img-label" aria-hidden="true">Porto Belo · SC</div>
         </div>
 
@@ -486,7 +478,7 @@ fbq('track', 'PageView');
 
 
     <!-- ═══════ FORMULÁRIO ═══════ -->
-    <section class="cta-section" id="formulario" aria-labelledby="form-titulo">
+    <section class="cta-section" id="contato" aria-labelledby="form-titulo">
       <div class="section-inner">
 
         <div class="section-eyebrow eyebrow-center" aria-hidden="true">
@@ -503,7 +495,9 @@ fbq('track', 'PageView');
           Preencha o formulário. Nossa equipe entrará em contato com você imediatamente.
         </p>
 
-        <form class="cta-form" id="form-contato" novalidate>
+        <!-- O id #formulario fica no próprio form, não na seção: todo botão
+             "Quero investir…" cai direto nos campos. -->
+        <form class="cta-form" id="formulario" novalidate>
 
           <div class="form-row">
             <label class="form-label" for="nome">Nome completo</label>
@@ -584,18 +578,6 @@ fbq('track', 'PageView');
             </select>
           </div>
 
-          <div class="form-row">
-            <label class="form-label" for="profissao">Profissão</label>
-            <input
-              class="form-input"
-              type="text"
-              id="profissao"
-              name="profissao"
-              required
-              placeholder="Ex.: Empresário, médico, advogado…"
-              autocomplete="organization-title">
-          </div>
-
           <div id="form-feedback" class="form-feedback" role="alert" aria-live="polite" hidden></div>
 
           <button type="submit" class="btn form-submit">Quero investir no ARI</button>
@@ -612,37 +594,14 @@ fbq('track', 'PageView');
   <footer>
     <div class="footer-inner">
 
-      <!-- ALTERADO: texto substituído pelas logos + redes sociais -->
+      <!-- Só as logos. WhatsApp e Instagram saíram de propósito: quem sai por
+           eles não entra no CRM nem conta para a Meta. -->
       <div class="footer-brand-block">
         <div class="footer-logos">
           <img src="img/ARI.webp"   alt="ARI — Ativo de Renda Imobiliária" class="footer-logo-ari">
           <span class="footer-logos-sep" aria-hidden="true"></span>
-          <img src="img/logo.png"   alt="Arck1Pro"                         class="footer-logo-arck">
+          <img src="img/logo.webp"  alt="Arck1Pro"                         class="footer-logo-arck">
         </div>
-        <!-- NOVO: links de redes sociais -->
-        <nav class="footer-social" aria-label="Redes sociais">
-          <a href="https://wa.me/554791991866"
-             class="footer-social-link"
-             target="_blank"
-             rel="noopener noreferrer"
-             aria-label="WhatsApp Arck1Pro">
-            <!-- ícone WhatsApp (SVG inline) -->
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.526 5.845L.057 23.535a.5.5 0 0 0 .608.608l5.699-1.465A11.945 11.945 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.805 9.805 0 0 1-5.007-1.374l-.36-.214-3.724.957.983-3.607-.235-.372A9.785 9.785 0 0 1 2.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/>
-            </svg>
-          </a>
-          <a href="https://instagram.com/arck1pro"
-             class="footer-social-link"
-             target="_blank"
-             rel="noopener noreferrer"
-             aria-label="Instagram @arck1pro">
-            <!-- ícone Instagram (SVG inline) -->
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>
-            </svg>
-          </a>
-        </nav>
       </div>
 
       <p class="footer-legal">
