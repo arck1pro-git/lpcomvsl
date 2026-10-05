@@ -18,8 +18,8 @@
        da página de destino nem monta público de quem visitou a LP. Não conta
        como conversão. Sem a tag de fallback sem-JS.
        O único evento de conversão é o Lead, disparado em js/main.js depois
-       que o SprintHub confirma a criação do contato, uma vez por lead, com
-       eventID estável.
+       que o webhook do SprintHub recebe o envio — no máximo um por aparelho
+       a cada 24 h.
        autoConfig=false impede a Meta de detectar e registrar eventos por conta
        própria (clique em botão, metadados da página) — era por aí que entrava
        Lead fantasma que ninguém consegue reconciliar. -->
@@ -92,7 +92,11 @@ fbq('track', 'PageView');
           registrados em cartório, sem depender da bolsa, sem surpresa de IR.
         </p>
 
-        <a href="#formulario" class="btn" data-cta="hero">Quero saber mais</a>
+        <!-- Não usar "quero saber mais" em nenhum texto clicável da página: uma
+             regra do Gerenciador de Eventos (criada em 27/05/2026, vale para
+             todo site deste pixel) transforma cada clique nesse texto em
+             Lead. O único Lead da LP é o do envio do formulário. -->
+        <a href="#formulario" class="btn" data-cta="hero">Quero investir no ARI</a>
 
       </div>
 
@@ -590,16 +594,6 @@ fbq('track', 'PageView');
               required
               placeholder="Ex.: Empresário, médico, advogado…"
               autocomplete="organization-title">
-          </div>
-
-          <!-- NOVO: armadilha para robôs (honeypot). Fica fora da tela, fora da
-               ordem do Tab e escondida do leitor de tela: pessoa nenhuma
-               preenche. Robô preenche todo campo que encontra, e o envio é
-               descartado em js/main.js sem ir ao CRM nem disparar o Lead.
-               Nome sem categoria de autopreenchimento de propósito. -->
-          <div class="form-hp" aria-hidden="true">
-            <label for="site-empresa">Não preencha este campo</label>
-            <input type="text" id="site-empresa" name="site_empresa" tabindex="-1" autocomplete="off">
           </div>
 
           <div id="form-feedback" class="form-feedback" role="alert" aria-live="polite" hidden></div>

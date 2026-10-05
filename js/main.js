@@ -17,20 +17,16 @@ document.querySelectorAll('a[data-cta]').forEach(function (btn) {
    RASTREAMENTO DE CONVERSÃO (META) — FONTE ÚNICA
    ═══════════════════════════════════════════════════════════
    Tudo que diz respeito ao evento Lead mora nesta seção, e só aqui.
-   Regra única: o Lead é disparado depois que o SprintHub confirma a
-   criação do contato, uma vez por lead, com um event_id estável.
-
-   LIMITE CONHECIDO: o site é estático, sem backend próprio. O event_id
-   nasce no navegador e a idempotência é por navegador. Duas conversões
-   do mesmo lead em dispositivos diferentes não se enxergam — só um
-   servidor resolveria isso. */
+   Fluxo único: o formulário vai ao webhook do SprintHub; respondeu OK,
+   o Lead dispara e o formulário trava no aparelho por 24 h. Sem filtro
+   de robô. */
 
 /* ─── ARMAZENAMENTO ─────────────────────────────────────── */
-/* localStorage falha em aba anônima, com storage bloqueado ou cota cheia.
-   Nesses casos perde-se a memória entre carregamentos, nunca a conversão:
-   o fluxo degrada para o comportamento de sessão única. */
-var STORE_CONVERSOES = 'ari.conversoes.v1';
+/* Guarda a atribuição entre visitas e a hora do último envio do aparelho.
+   localStorage falha em aba anônima, com storage bloqueado ou cota cheia:
+   aí os dois valem só para a visita atual, e o envio segue normal. */
 var STORE_ATRIBUICAO = 'ari.atribuicao.v1';
+var STORE_ENVIO      = 'ari.envio.v1';
 
 function storeLer(chave) {
   try {
@@ -112,144 +108,90 @@ function lerCookie(nome) {
   return '';
 }
 
-/* ─── REGISTRO DE CONVERSÕES (IDEMPOTÊNCIA) ─────────────── */
-/* A conversão é identificada pelo WhatsApp em dígitos — o mesmo campo que
-   o SprintHub usa para reconhecer contato repetido (a resposta 409).
-
-   Efeito: recarregar a página, voltar do /obrigado, reenviar o mesmo
-   formulário ou tentar de novo depois de um erro reaproveitam o MESMO
-   event_id e não geram um segundo Lead. Um lead de fato diferente tem
-   outra chave e é contado normalmente.
-
-   O e-mail é a segunda âncora: quem reenvia corrigindo só o telefone cai
-   na conversão que já existe e não vira um segundo Lead. Do e-mail só o
-   hash SHA-256 fica gravado, nunca o texto. */
+/* ─── EVENT_ID ──────────────────────────────────────────── */
+/* Um id novo a cada envio. Não serve para barrar envio repetido: é o que
+   faz a Meta reconhecer o Lead do navegador e a cópia que o gateway manda
+   pelo servidor como um evento só. */
 function novoEventId() {
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
   return 'lead-' + Date.now() + '-' + Math.random().toString(16).slice(2);
 }
 
-/* Espelho em memoria. Com o localStorage bloqueado (aba anonima, cota cheia)
-   storeLer devolve null e cada submit criaria um event_id novo, derrubando a
-   protecao contra disparo duplo. Com o espelho, a idempotencia sobrevive ao
-   menos dentro da visita, que e o que esta secao promete no topo. */
-var conversoesMemoria = {};
-
-function lerConversoes() {
-  return storeLer(STORE_CONVERSOES) || conversoesMemoria;
-}
-
-function gravarConversao(chave, registro) {
-  conversoesMemoria[chave] = registro;
-  var todas = storeLer(STORE_CONVERSOES) || {};
-  todas[chave] = registro;
-  storeGravar(STORE_CONVERSOES, todas);
-}
-
-/* SHA-256 em hexadecimal. crypto.subtle só existe em https; fora dele
-   devolve '' e a checagem pelo e-mail simplesmente não acontece. */
-async function sha256(texto) {
-  try {
-    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto));
-    return Array.from(new Uint8Array(buf)).map(function (b) {
-      return b.toString(16).padStart(2, '0');
-    }).join('');
-  } catch (e) {
-    return '';
-  }
-}
-
-/* Chave da conversão: o WhatsApp em dígitos. Se o número é novo mas o
-   e-mail já converteu neste navegador, é a mesma pessoa corrigindo o
-   telefone — vale a chave antiga, e com ela o event_id antigo. */
-function localizarChave(whatsapp, emailHash) {
-  var todas = lerConversoes();
-  if (todas[whatsapp] || !emailHash) return whatsapp;
-
-  for (var k in todas) {
-    if (todas[k] && todas[k].email_hash === emailHash) {
-      logConv('mesmo e-mail com outro telefone — mesma conversão', k);
-      return k;
-    }
-  }
-  return whatsapp;
-}
-
-/* Devolve o registro da conversão, criando um na primeira vez. O event_id
-   nasce aqui e nunca muda para a mesma chave — é o que impede um retry de
-   virar uma segunda conversão. */
-function obterConversao(chave, emailHash) {
-  var reg = lerConversoes()[chave];
-
-  if (reg && reg.event_id) {
-    logConv('conversão já conhecida — reaproveitando event_id', reg);
-    return reg;
-  }
-
-  reg = {
-    event_id:             novoEventId(),
-    email_hash:           emailHash || '',
-    criado_em:            new Date().toISOString(),
-    meta_lead_enviado:    false,
-    meta_lead_enviado_em: ''
-  };
-  gravarConversao(chave, reg);
-  logConv('event_id atribuído', reg.event_id);
-  return reg;
-}
-
 /* ─── CORRESPONDÊNCIA AVANÇADA ──────────────────────────── */
-/* E-mail e telefone seguem com o Lead para a Meta casar o evento com a
-   conta de quem converteu. O pixel aplica SHA-256 no navegador antes de
+/* Nome, e-mail e telefone seguem com o Lead para a Meta casar o evento com
+   a conta de quem converteu. O pixel aplica SHA-256 no navegador antes de
    enviar: o dado em texto puro não sai para a Meta. Também não é gravado
    no localStorage — só passa por aqui na hora do disparo.
-   Formato pedido pela Meta: e-mail minúsculo e sem espaços; telefone com
-   DDI 55 + DDD + número, só dígitos. */
+   Formato pedido pela Meta: tudo minúsculo; nome sem pontuação, primeiro
+   nome em fn e último sobrenome em ln; telefone com DDI 55 + DDD + número,
+   só dígitos. O telefone também vai como external_id: é a mesma chave que
+   o CRM usa para reconhecer o contato. */
 var PIXEL_ID = '2102101857297540'; // o mesmo do fbq('init') no index.html
 
-function dadosCorrespondencia(email, whatsapp) {
-  var dados = {};
-  var em = String(email || '').trim().toLowerCase();
-  if (em)       dados.em = em;
-  if (whatsapp) dados.ph = '55' + whatsapp;
+function dadosCorrespondencia(nome, email, whatsapp) {
+  var dados  = { country: 'br' };
+  var em     = String(email || '').trim().toLowerCase();
+  var partes = String(nome || '').toLowerCase()
+    .replace(/[^\p{L}\s]/gu, '').trim().split(/\s+/).filter(Boolean);
+
+  if (em)                dados.em = em;
+  if (partes.length)     dados.fn = partes[0];
+  if (partes.length > 1) dados.ln = partes[partes.length - 1];
+  if (whatsapp) {
+    dados.ph          = '55' + whatsapp;
+    dados.external_id = '55' + whatsapp;
+  }
   return dados;
+}
+
+/* ─── PARÂMETROS DO LEAD: NENHUM ────────────────────────── */
+/* Este pixel está no modo de dados protegidos da Meta (ProtectedDataMode,
+   visto na config do pixel em 05/10/2026): o próprio fbevents.js descarta
+   todo parâmetro fora de uma lista fixa — UTMs, content_name e qualquer
+   campo personalizado — e reduz a URL ao domínio. Mandar não adianta, por
+   isso o Lead sai sem parâmetros. A atribuição da Meta vem do clique no
+   anúncio (fbclid/_fbc), que passa; as UTMs ficam no CRM. */
+
+/* ─── TRAVA POR APARELHO ────────────────────────────────── */
+/* Depois de um envio aceito pelo CRM, o aparelho fica 24 h sem poder
+   enviar de novo: o botão vira "Dados enviados" e o formulário trava —
+   inclusive se a pessoa voltar à página. Com isso sai um Lead só por
+   aparelho. Era a origem dos Leads a mais na Meta: a mesma pessoa
+   reenviando 2 a 4 vezes na mesma hora, às vezes com outro número, e o CRM
+   juntando tudo num contato só.
+   Custo aceito: uma segunda pessoa no mesmo aparelho, no mesmo dia, fala
+   pelo WhatsApp. O espelho em memória segura a trava enquanto a página
+   está aberta, mesmo sem localStorage. */
+var JANELA_ENVIO_MS = 24 * 60 * 60 * 1000;
+var envioMemoria    = 0;
+
+function envioRecente() {
+  var ultimo    = Math.max(Number(storeLer(STORE_ENVIO)) || 0, envioMemoria);
+  var decorrido = Date.now() - ultimo;
+  // decorrido negativo = relógio do aparelho voltou; não trava para sempre
+  return decorrido >= 0 && decorrido < JANELA_ENVIO_MS;
+}
+
+function marcarEnvio() {
+  envioMemoria = Date.now();
+  storeGravar(STORE_ENVIO, envioMemoria);
 }
 
 /* ─── ÚNICO PONTO DE DISPARO DO LEAD ────────────────────── */
 /* Nenhum outro lugar do projeto pode chamar fbq('track', 'Lead').
-   Só é invocada depois da confirmação do SprintHub. */
-function dispararLead(chave, reg, correspondencia) {
-  if (reg.meta_lead_enviado) {
-    logConv('Lead já enviado antes — nenhum evento novo', reg);
-    return;
-  }
-
+   Só é invocada depois que o webhook do SprintHub responde OK — e o
+   formulário trava logo em seguida, então roda uma vez por aparelho. */
+function dispararLead(eventId, correspondencia) {
   if (typeof fbq !== 'function') {
-    logConv('pixel indisponível: Lead não enviado', reg.event_id);
+    logConv('pixel indisponível: Lead não enviado', eventId);
     return;
   }
 
   // Um novo init do MESMO pixel só anexa os dados de correspondência ao
   // pixel já carregado; não dispara evento. O Lead logo abaixo sai com eles.
   fbq('init', PIXEL_ID, correspondencia);
-  fbq('track', 'Lead', { content_name: 'Formulário ARI' }, { eventID: reg.event_id });
-
-  // fbq.callMethod só existe depois que o fbevents.js carrega de fato. Sem
-  // ele a chamada apenas entrou na fila do stub e provavelmente não sai —
-  // bloqueador de anúncios. O lead está no CRM mesmo assim: é a maior
-  // origem de divergência entre os relatórios, e precisa ficar visível.
-  var entregue = typeof fbq.callMethod === 'function';
-  if (!entregue) {
-    logConv('ATENÇÃO: Lead apenas enfileirado, fbevents.js não carregou', reg.event_id);
-  }
-
-  // Marcado como enviado mesmo quando só enfileirou: entre arriscar uma
-  // duplicação e arriscar uma perda, a regra do projeto é nunca duplicar.
-  reg.meta_lead_enviado    = true;
-  reg.meta_lead_enviado_em = new Date().toISOString();
-  gravarConversao(chave, reg);
-  logConv(entregue ? 'Lead enviado à Meta'
-                  : 'Lead contabilizado SEM confirmação de entrega à Meta', reg);
+  fbq('track', 'Lead', {}, { eventID: eventId });
+  logConv('Lead enviado à Meta', eventId);
 }
 
 /* ─── SIMULADOR ─────────────────────────────────────────── */
@@ -423,9 +365,8 @@ document.querySelectorAll('.faq-btn').forEach(function (btn) {
 
 /* ─── WHATSAPP: máscara (XX) XXXXX-XXXX + validação dos 11 dígitos ── */
 /* ALTERADO: o campo agora aceita só celular com 11 dígitos (DDD + 9 dígitos).
-   O fixo de 10 dígitos saiu de propósito: o lead é contatado por WhatsApp e
-   o número é a chave de idempotência da conversão — número curto ou
-   incompleto virava lead impossível de atender. */
+   O fixo de 10 dígitos saiu de propósito: o lead é contatado por WhatsApp —
+   número curto ou incompleto virava lead impossível de atender. */
 
 var telEl     = document.getElementById('tel');
 var telErroEl = document.getElementById('tel-erro');
@@ -528,96 +469,45 @@ telEl.addEventListener('blur',   function () { validarTel(true); });
 
 const WEBHOOK_URL = 'https://sprinthub-api-master.sprinthub.app/api/hook/lparck1pro?i=arck1pro&access_token=s9matowcwH_jRUIuiRu3XgEJQJWhfim2dTVxlKSxLP_A-wg6fQ';
 
-/* ─── CONFIRMAÇÃO DO WEBHOOK ────────────────────────────── */
-/* NOVO: o pixel só pode disparar depois que o SprintHub confirmar o envio.
-   Status 2xx sozinho não é confirmação: a API pode responder 200 e ainda
-   assim sinalizar a falha no corpo (slug de campo inválido, por exemplo).
-   Esta função concentra esse julgamento e devolve o motivo da recusa. */
-async function confirmarEnvio(response) {
-  // O corpo só pode ser lido uma vez — por isso é lido aqui, antes de tudo.
-  var corpo = await response.text().catch(function () { return ''; });
-
-  // 409 = lead já existente no CRM. O SprintHub recebeu e reconheceu o
-  // contato, então a conversão vale do mesmo jeito.
-  if (!response.ok && response.status !== 409) {
-    return { ok: false, motivo: 'HTTP ' + response.status + ' — ' + corpo };
-  }
-
-  // A API responde em JSON. Se o corpo trouxer um sinal explícito de falha,
-  // o envio NÃO está confirmado — mesmo que o status seja 200.
-  var dados = null;
-  try { dados = JSON.parse(corpo); } catch (e) { /* corpo vazio ou texto puro */ }
-
-  if (dados && typeof dados === 'object') {
-    var falhou =
-      dados.success === false ||
-      Boolean(dados.error) ||
-      (Array.isArray(dados.errors) && dados.errors.length > 0) ||
-      Number(dados.status || dados.statusCode || 0) >= 400;
-
-    if (falhou) {
-      return { ok: false, motivo: 'SprintHub recusou o envio — ' + corpo };
-    }
-  }
-
-  return { ok: true, motivo: '' };
-}
-
-/* ─── FILTRO DE ROBÔ ────────────────────────────────────── */
-/* NOVO: dois sinais que não custam nada a quem preenche de verdade:
-   - honeypot: campo fora da tela (index.html) que só robô preenche;
-   - tempo mínimo: ninguém preenche sete campos e escolhe três opções em
-     menos de 3 s — robô preenche tudo de uma vez.
-   O relógio começa no primeiro contato com o formulário, não na abertura
-   da página: a LP demora a terminar de carregar (vídeo, imagens) e o robô
-   que espera o carregamento completo passaria folgado pelos 3 s.
-   reCAPTCHA ficou de fora: o token precisa ser conferido num servidor com
-   a chave secreta, e esta LP não tem um. Conferido só no navegador, o
-   robô pularia a checagem. */
-var TEMPO_MINIMO_ENVIO_MS = 3000;
-var paginaAbertaEm        = Date.now();
-var formIniciadoEm        = 0;
-
-['focusin', 'input', 'change'].forEach(function (tipo) {
-  document.getElementById('form-contato').addEventListener(tipo, function () {
-    if (!formIniciadoEm) formIniciadoEm = Date.now();
-  });
-});
-
-function motivoRobo() {
-  if (document.getElementById('site-empresa').value) return 'honeypot preenchido';
-  // Valor posto por script, sem evento nenhum: sobra a abertura da página
-  var decorrido = Date.now() - (formIniciadoEm || paginaAbertaEm);
-  if (decorrido < TEMPO_MINIMO_ENVIO_MS) return 'formulário preenchido em ' + decorrido + ' ms';
-  return '';
-}
-
-/* Mensagem de sucesso + redirect. É a mesma para lead real e para robô
-   barrado: o robô não descobre que foi filtrado. */
-function concluirComSucesso(form, feedback) {
-  feedback.textContent = 'Recebemos seu contato! Redirecionando…';
-  feedback.classList.add('form-feedback--ok');
-  feedback.hidden = false;
-  form.reset(); // evita que o navegador restaure os valores ao voltar
-
-  // Caminho até o arquivo (e não até a pasta) para funcionar em qualquer
-  // ambiente — inclusive abrindo por file:// ou em servidor que não resolve
-  // o index.html de um diretório automaticamente.
-  // O atraso curto dá tempo do beacon do pixel sair antes da navegação —
-  // sem ele, o navegador pode cancelar a requisição do evento Lead.
-  setTimeout(function () {
-    window.location.assign('obrigado/index.html');
-  }, 600);
-}
-
 /* NOVO: ao limpar o formulário (sucesso do envio) o erro do telefone sai junto */
 document.getElementById('form-contato').addEventListener('reset', function () {
   telEl.setCustomValidity('');
   limparErroTel();
 });
 
+/* ─── FORMULÁRIO TRAVADO APÓS O ENVIO ───────────────────── */
+/* Campos e botão desabilitados, botão com "Dados enviados". `aviso` é a
+   mensagem que fica acima do botão; vazio mantém a que já está lá. */
+function travarFormulario(aviso) {
+  var form     = document.getElementById('form-contato');
+  var btn      = form.querySelector('[type="submit"]');
+  var feedback = document.getElementById('form-feedback');
+
+  Array.prototype.forEach.call(form.elements, function (el) { el.disabled = true; });
+  btn.textContent = 'Dados enviados ✓';
+  btn.classList.add('form-submit--enviado');
+
+  if (aviso) {
+    feedback.textContent = aviso;
+    feedback.className   = 'form-feedback form-feedback--ok';
+    feedback.hidden      = false;
+  }
+}
+
+var AVISO_JA_ENVIADO = 'Já recebemos seus dados. Nossa equipe vai falar com você pelo WhatsApp.';
+
+// Ao abrir a página e ao voltar do /obrigado pelo botão "voltar" — que
+// pode restaurar a página da memória sem rodar este script de novo.
+if (envioRecente()) travarFormulario(AVISO_JA_ENVIADO);
+window.addEventListener('pageshow', function (e) {
+  if (e.persisted && envioRecente()) travarFormulario(AVISO_JA_ENVIADO);
+});
+
 document.getElementById('form-contato').addEventListener('submit', async function (e) {
   e.preventDefault();
+
+  // Já enviou neste aparelho: nada vai ao CRM nem à Meta.
+  if (envioRecente()) { travarFormulario(AVISO_JA_ENVIADO); return; }
 
   // NOVO: portão do telefone. Marca a mensagem embaixo do campo e deixa o
   // número inválido para a validação nativa — nada é enviado sem os
@@ -638,28 +528,15 @@ document.getElementById('form-contato').addEventListener('submit', async functio
   feedback.hidden       = true;
   feedback.className    = 'form-feedback';
 
-  // NOVO: envio de robô não vai ao CRM nem conta como Lead
-  var robo = motivoRobo();
-  if (robo) {
-    logConv('envio descartado como robô', robo);
-    concluirComSucesso(this, feedback);
-    return;
-  }
+  var whatsapp = document.getElementById('tel').value.replace(/\D/g, '');
+  var email    = document.getElementById('email').value.trim();
+  var eventId  = novoEventId();
+  logConv('formulario recebido', eventId);
 
   // ALTERADO: os nomes abaixo são os slugs reais dos campos no SprintHub
   // (confirmados pelo schema que a própria API devolve em caso de erro 400).
   // Não renomear sem conferir no CRM — nome errado = campo chega vazio.
   // "nome" e "whatsapp" são obrigatórios: a API responde 400 sem eles.
-  // Chave da conversao: WhatsApp em digitos, ou a chave antiga quando o
-  // e-mail ja converteu neste navegador. E por ela que o registro de
-  // idempotencia reconhece um envio repetido do MESMO lead.
-  var whatsapp  = document.getElementById('tel').value.replace(/\D/g, '');
-  var email     = document.getElementById('email').value.trim();
-  var emailHash = await sha256(email.toLowerCase());
-  var chave     = localizarChave(whatsapp, emailHash);
-  var conversao = obterConversao(chave, emailHash);
-  logConv('formulario recebido', { chave: chave, event_id: conversao.event_id });
-
   var params = {
     // ALTERADO: era "firstname", que a API rejeita com
     // 400 "nome deve ser string, e é obrigatório" — nenhum lead entrava.
@@ -694,7 +571,7 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     // Auditoria: e o que permite cruzar lead no CRM x evento na Meta.
     // Campos ainda sem slug correspondente no SprintHub somem em silencio
     // ate serem criados la.
-    event_id:        conversao.event_id,
+    event_id:        eventId,
     primeira_visita: atribuicao.primeira_visita || '',
     convertido_em:   new Date().toISOString(),
   };
@@ -714,23 +591,29 @@ document.getElementById('form-contato').addEventListener('submit', async functio
     // e o navegador nem dispara o preflight OPTIONS.
     const response = await fetch(url, { method: 'POST' });
 
-    // ALTERADO: a confirmação do SprintHub é o portão de tudo o que vem
-    // depois — pixel, mensagem de sucesso e redirect. Sem confirmação,
-    // cai no catch e nenhum evento de conversão é disparado.
-    const envio = await confirmarEnvio(response);
-    if (!envio.ok) throw new Error(envio.motivo);
+    // O SprintHub responde 200 quando recebe e 400 quando falta campo
+    // obrigatório. Sem OK, cai no catch e o Lead não dispara.
+    if (!response.ok) {
+      throw new Error('HTTP ' + response.status + ' — ' + await response.text().catch(function () { return ''; }));
+    }
 
-    // Confirmado pelo CRM: unico ponto do projeto autorizado a contabilizar a
-    // conversao. Toda a decisao de disparar ou nao esta em dispararLead().
-    logConv('SprintHub confirmou a criacao do lead', conversao.event_id);
-    dispararLead(chave, conversao, dadosCorrespondencia(email, whatsapp));
+    logConv('SprintHub recebeu o lead', eventId);
+    marcarEnvio();
+    dispararLead(eventId, dadosCorrespondencia(params.nome, email, whatsapp));
 
-    concluirComSucesso(this, feedback);
+    this.reset(); // evita que o navegador restaure os valores ao voltar
+    travarFormulario('Recebemos seu contato! Redirecionando…');
+
+    // Caminho até o arquivo (e não até a pasta) para funcionar em qualquer
+    // ambiente — inclusive abrindo por file:// ou em servidor que não resolve
+    // o index.html de um diretório automaticamente.
+    // O atraso curto dá tempo do beacon do pixel sair antes da navegação —
+    // sem ele, o navegador pode cancelar a requisição do evento Lead.
+    setTimeout(function () {
+      window.location.assign('obrigado/index.html');
+    }, 600);
 
   } catch (err) {
-    // O event_id fica gravado e sem marca de envio: a proxima tentativa
-    // reaproveita o mesmo id em vez de criar uma segunda conversao.
-    logConv('envio recusado, event_id preservado para retry', conversao.event_id);
     console.error('[ARI] Erro ao enviar formulario:', err);
     feedback.textContent = 'Ocorreu um erro ao enviar. Por favor, tente novamente.';
     feedback.classList.add('form-feedback--err');

@@ -847,15 +847,6 @@ input[type="range"]::-moz-range-thumb {
   color: #ffaaaa;
 }
 
-/* Honeypot: fora da tela em vez de display:none, que robô costuma pular */
-.form-hp {
-  position: absolute;
-  left: -10000px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
-
 .form-submit {
   width: 100%;
   margin-top: .25rem;
@@ -865,6 +856,11 @@ input[type="range"]::-moz-range-thumb {
   opacity: .6;
   cursor: not-allowed;
   transform: none;
+}
+/* Envio concluído: travado, mas com cor cheia — é confirmação, não erro */
+.form-submit--enviado:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 /* NOVO: feedback visual de sucesso/erro exibido abaixo dos campos (substitui o alert) */
