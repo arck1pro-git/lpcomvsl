@@ -17,9 +17,9 @@ document.querySelectorAll('a[data-cta]').forEach(function (btn) {
    RASTREAMENTO DE CONVERSÃO (META) — FONTE ÚNICA
    ═══════════════════════════════════════════════════════════
    Tudo que diz respeito ao evento Lead mora nesta seção, e só aqui.
-   Fluxo único: o formulário vai ao webhook do SprintHub; respondeu OK,
-   o Lead dispara e o formulário trava no aparelho por 24 h. Sem filtro
-   de robô. */
+   Fluxo único: o formulário vai ao mesmo tempo ao SprintHub e ao Chroma;
+   o primeiro que confirmar dispara o Lead e trava o formulário no aparelho
+   por 24 h. Sem filtro de robô. */
 
 /* ─── ARMAZENAMENTO ─────────────────────────────────────── */
 /* Guarda a atribuição entre visitas e a hora do último envio do aparelho.
@@ -179,8 +179,9 @@ function marcarEnvio() {
 
 /* ─── ÚNICO PONTO DE DISPARO DO LEAD ────────────────────── */
 /* Nenhum outro lugar do projeto pode chamar fbq('track', 'Lead').
-   Só é invocada depois que o webhook do SprintHub responde OK — e o
-   formulário trava logo em seguida, então roda uma vez por aparelho. */
+   Só é invocada depois que um dos CRMs (SprintHub ou Chroma) confirma o
+   recebimento — e o formulário trava logo em seguida, então roda uma vez
+   por aparelho. */
 function dispararLead(eventId, correspondencia) {
   if (typeof fbq !== 'function') {
     logConv('pixel indisponível: Lead não enviado', eventId);
@@ -469,6 +470,60 @@ telEl.addEventListener('blur',   function () { validarTel(true); });
 
 const WEBHOOK_URL = 'https://sprinthub-api-master.sprinthub.app/api/hook/lparck1pro?i=arck1pro&access_token=s9matowcwH_jRUIuiRu3XgEJQJWhfim2dTVxlKSxLP_A-wg6fQ';
 
+/* Resolve quando o SprintHub responde OK; rejeita no resto. */
+async function enviarSprintHub(url) {
+  // Sem headers e sem body: assim a requisição é "simples" para o CORS
+  // e o navegador nem dispara o preflight OPTIONS.
+  const response = await fetch(url, { method: 'POST' });
+
+  // O SprintHub responde 200 quando recebe e 400 quando falta campo
+  // obrigatório.
+  if (!response.ok) {
+    throw new Error('HTTP ' + response.status + ' — ' + await response.text().catch(function () { return ''; }));
+  }
+}
+
+/* ─── FORMULÁRIO → CRM CHROMA ───────────────────────────── */
+/* O Chroma recebe pelo SERVIDOR: a URL da webhook dele leva o segredo e não
+   pode estar neste arquivo, que qualquer visitante lê. O navegador chama
+   a função api/lead.js, no mesmo domínio, e ela repassa ao CRM — com
+   novas tentativas e, se mesmo assim falhar, o lead inteiro no log da
+   Vercel para reenvio manual. As chaves abaixo são as que a webhook
+   conhece; a lista oficial está em api/lead.js. */
+var CHROMA_ENDPOINT = '/api/lead';
+
+function enviarChroma(dados) {
+  return fetch(CHROMA_ENDPOINT, {
+    method:    'POST',
+    headers:   { 'Content-Type': 'application/json' },
+    body:      JSON.stringify(dados),
+    keepalive: true, // segue mesmo se a pessoa fechar a aba logo após a confirmação
+  }).then(function (response) {
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+  });
+}
+
+/* No CRM a resposta aparece como o texto que a pessoa escolheu
+   ("R$100.000 a R$300.000"), não como o value interno ("100k-300k"). */
+function textoOpcao(id) {
+  var sel = document.getElementById(id);
+  var opt = sel.options[sel.selectedIndex];
+  return opt && opt.value ? opt.text.trim() : '';
+}
+
+/* Resolve com o primeiro envio que der certo; rejeita só se todos
+   falharem. Faz o papel do Promise.any, que falta no Safari do iOS 12. */
+function primeiroQueConfirmar(envios) {
+  return new Promise(function (resolve, reject) {
+    var falhas = 0;
+    envios.forEach(function (envio) {
+      envio.then(resolve, function () {
+        if (++falhas === envios.length) reject(new Error('nenhum CRM confirmou o recebimento'));
+      });
+    });
+  });
+}
+
 /* NOVO: ao limpar o formulário (sucesso do envio) o erro do telefone sai junto */
 document.getElementById('formulario').addEventListener('reset', function () {
   telEl.setCustomValidity('');
@@ -588,18 +643,36 @@ document.getElementById('formulario').addEventListener('submit', async function 
   // A URL base já possui "?", então os campos são anexados com "&"
   var url = WEBHOOK_URL + '&' + query.toString();
 
+  // Chaves exatas da webhook do Chroma. Telefone só com dígitos e com o
+  // DDI: 5547999346074.
+  var dadosChroma = {
+    nome:                 params.nome,
+    telefone:             '55' + whatsapp,
+    email:                email,
+    capital_disponivel:   textoOpcao('capital-form'),
+    ja_investe:           textoOpcao('modalidade'),
+    pronto_para_investir: textoOpcao('prazo-decisao'),
+    pixel:                PIXEL_ID,
+  };
+
+  // Os dois CRMs recebem ao mesmo tempo. Cada falha vai ao console; a do
+  // Chroma também fica no log da Vercel, com o lead, para reenvio manual.
+  var envioSprintHub = enviarSprintHub(url).then(
+    function () { logConv('SprintHub recebeu o lead', eventId); },
+    function (err) { console.error('[ARI] SprintHub não recebeu o lead:', err); throw err; }
+  );
+  var envioChroma = enviarChroma(dadosChroma).then(
+    function () { logConv('Chroma recebeu o lead', eventId); },
+    function (err) { console.error('[ARI] Chroma não recebeu o lead (detalhe no log da Vercel):', err); throw err; }
+  );
+
   try {
-    // Sem headers e sem body: assim a requisição é "simples" para o CORS
-    // e o navegador nem dispara o preflight OPTIONS.
-    const response = await fetch(url, { method: 'POST' });
+    // O primeiro CRM que confirmar basta: com o lead guardado em um deles,
+    // pedir para a pessoa reenviar só duplicaria no outro. O envio mais
+    // lento segue em segundo plano. Se os dois falharem, cai no catch e o
+    // Lead não dispara.
+    await primeiroQueConfirmar([envioSprintHub, envioChroma]);
 
-    // O SprintHub responde 200 quando recebe e 400 quando falta campo
-    // obrigatório. Sem OK, cai no catch e o Lead não dispara.
-    if (!response.ok) {
-      throw new Error('HTTP ' + response.status + ' — ' + await response.text().catch(function () { return ''; }));
-    }
-
-    logConv('SprintHub recebeu o lead', eventId);
     marcarEnvio();
     dispararLead(eventId, dadosCorrespondencia(params.nome, email, whatsapp));
 
