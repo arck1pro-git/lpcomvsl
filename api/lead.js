@@ -18,9 +18,9 @@
 const CRM_WEBHOOK_URL = "https://chromacrm.vercel.app/api/webhooks/typebot-lp-ari-950a3a?secret=e9bbfc9a993b1724ecf1f07dad82997f5a9613986ae88866100573b1fb40cca0";
 
 /* ─── CAMPOS ACEITOS PELO CRM ───────────────────────────── */
-/* Os nomes exatos que a webhook conhece. Chave fora desta lista o CRM
-   descarta em silêncio — acento, hífen e maiúscula importam. Só estas
-   saem daqui, mesmo que o navegador mande outras. */
+/* Os nomes exatos que a webhook conhece. Chave que a webhook não declara
+   o CRM descarta em silêncio — acento, hífen e maiúscula importam. Só as
+   chaves destas duas listas saem daqui, mesmo que o navegador mande outras. */
 const CAMPOS = [
   'nome',                 // Contato · Nome
   'telefone',             // Contato · WhatsApp
@@ -29,6 +29,17 @@ const CAMPOS = [
   'ja_investe',           // Contato · campo "ja_investe"
   'pronto_para_investir', // Contato · campo "pronto_para_investir"
   'pixel',                // Contato · campo "pixel_id" — o CRM usa para devolver eventos à Meta
+];
+
+/* Atribuição: ia para o SprintHub, que saiu em 15/10/2026. Na webhook "LP
+   ARI" as utm_* estão declaradas (15/10/2026) e viram campos do contato;
+   landing_page, cta_origem, fbclid, fbc e fbp ainda NÃO, e o Chroma as
+   descarta. Seguem mesmo assim: declaradas lá com estes mesmos nomes,
+   passam a ser gravadas sem novo deploy. Os nomes são os que o Chroma já
+   lê — utm_* nos relatórios por campanha, fbc/fbp/fbclid nos eventos à Meta. */
+const CAMPOS_ATRIBUICAO = [
+  'landing_page', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
+  'utm_term', 'utm_id', 'cta_origem', 'fbclid', 'fbc', 'fbp',
 ];
 
 /* ─── TENTATIVAS ────────────────────────────────────────── */
@@ -41,7 +52,7 @@ const PRAZO_TOTAL_MS     = 9000;
 const TIMEOUT_ENVIO_MS   = 5000;
 const ESPERAS_MS         = [500, 1500]; // antes da 2ª e da 3ª tentativa
 const FOLGA_ULTIMA_MS    = 1500;        // tempo mínimo que vale uma nova tentativa
-const TAMANHO_MAX_CAMPO  = 300;
+const TAMANHO_MAX_CAMPO  = 1000;        // landing_page com fbclid e UTMs passa de 300
 
 /* ─── LOG ───────────────────────────────────────────────── */
 /* Prefixo único para achar a jornada nos Runtime Logs da Vercel.
@@ -68,7 +79,7 @@ function telefoneComDdi(valor) {
 
 function montarLead(corpo) {
   const lead = {};
-  CAMPOS.forEach(function (campo) {
+  CAMPOS.concat(CAMPOS_ATRIBUICAO).forEach(function (campo) {
     const valor = campo === 'telefone' ? telefoneComDdi(corpo[campo]) : texto(corpo[campo]);
     if (valor) lead[campo] = valor;
   });

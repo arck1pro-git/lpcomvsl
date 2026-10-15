@@ -17,9 +17,9 @@ document.querySelectorAll('a[data-cta]').forEach(function (btn) {
    RASTREAMENTO DE CONVERSÃO (META) — FONTE ÚNICA
    ═══════════════════════════════════════════════════════════
    Tudo que diz respeito ao evento Lead mora nesta seção, e só aqui.
-   Fluxo único: o formulário vai ao mesmo tempo ao SprintHub e ao Chroma;
-   o primeiro que confirmar dispara o Lead e trava o formulário no aparelho
-   por 24 h. Sem filtro de robô. */
+   Fluxo único: o formulário vai ao CRM Chroma; confirmado o recebimento,
+   o Lead dispara e o formulário trava no aparelho por 24 h. Sem filtro
+   de robô. */
 
 /* ─── ARMAZENAMENTO ─────────────────────────────────────── */
 /* Guarda a atribuição entre visitas e a hora do último envio do aparelho.
@@ -96,8 +96,8 @@ function capturarAtribuicao() {
 var atribuicao = capturarAtribuicao();
 
 /* Cookies que a Meta usa para casar a conversão com o clique no anúncio.
-   Seguem junto do lead: sem eles a Conversions API, quando existir, perde
-   boa parte da atribuição. _fbc só existe se o pixel tiver carregado — por
+   Seguem junto do lead: sem eles os eventos que o Chroma devolve à Meta
+   perdem boa parte da atribuição. _fbc só existe se o pixel tiver carregado — por
    isso o fbclid cru também vai, como plano B. */
 function lerCookie(nome) {
   var partes = document.cookie ? document.cookie.split(';') : [];
@@ -179,9 +179,8 @@ function marcarEnvio() {
 
 /* ─── ÚNICO PONTO DE DISPARO DO LEAD ────────────────────── */
 /* Nenhum outro lugar do projeto pode chamar fbq('track', 'Lead').
-   Só é invocada depois que um dos CRMs (SprintHub ou Chroma) confirma o
-   recebimento — e o formulário trava logo em seguida, então roda uma vez
-   por aparelho. */
+   Só é invocada depois que o CRM Chroma confirma o recebimento — e o
+   formulário trava logo em seguida, então roda uma vez por aparelho. */
 function dispararLead(eventId, correspondencia) {
   if (typeof fbq !== 'function') {
     logConv('pixel indisponível: Lead não enviado', eventId);
@@ -464,34 +463,17 @@ telEl.addEventListener('input', function () {
 telEl.addEventListener('change', function () { validarTel(true); });
 telEl.addEventListener('blur',   function () { validarTel(true); });
 
-/* ─── FORMULÁRIO → SPRINTHUB WEBHOOK ────────────────────── */
-/* ALTERADO: destino migrado do webhook n8n para o hook do SprintHub.
-   Os nomes dos parâmetros seguem os campos esperados pelo SprintHub. */
-
-const WEBHOOK_URL = 'https://sprinthub-api-master.sprinthub.app/api/hook/lparck1pro?i=arck1pro&access_token=s9matowcwH_jRUIuiRu3XgEJQJWhfim2dTVxlKSxLP_A-wg6fQ';
-
-/* Resolve quando o SprintHub responde OK; rejeita no resto. */
-async function enviarSprintHub(url) {
-  // Sem headers e sem body: assim a requisição é "simples" para o CORS
-  // e o navegador nem dispara o preflight OPTIONS.
-  const response = await fetch(url, { method: 'POST' });
-
-  // O SprintHub responde 200 quando recebe e 400 quando falta campo
-  // obrigatório.
-  if (!response.ok) {
-    throw new Error('HTTP ' + response.status + ' — ' + await response.text().catch(function () { return ''; }));
-  }
-}
-
 /* ─── FORMULÁRIO → CRM CHROMA ───────────────────────────── */
-/* O Chroma recebe pelo SERVIDOR: a URL da webhook dele leva o segredo e não
+/* O lead vai só para o Chroma; o SprintHub saiu em 15/10/2026.
+   O Chroma recebe pelo SERVIDOR: a URL da webhook dele leva o segredo e não
    pode estar neste arquivo, que qualquer visitante lê. O navegador chama
    a função api/lead.js, no mesmo domínio, e ela repassa ao CRM — com
    novas tentativas e, se mesmo assim falhar, o lead inteiro no log da
-   Vercel para reenvio manual. As chaves abaixo são as que a webhook
-   conhece; a lista oficial está em api/lead.js. */
+   Vercel para reenvio manual. A lista oficial de chaves está em
+   api/lead.js. */
 var CHROMA_ENDPOINT = '/api/lead';
 
+/* Resolve quando o CRM confirma o recebimento; rejeita no resto. */
 function enviarChroma(dados) {
   return fetch(CHROMA_ENDPOINT, {
     method:    'POST',
@@ -509,19 +491,6 @@ function textoOpcao(id) {
   var sel = document.getElementById(id);
   var opt = sel.options[sel.selectedIndex];
   return opt && opt.value ? opt.text.trim() : '';
-}
-
-/* Resolve com o primeiro envio que der certo; rejeita só se todos
-   falharem. Faz o papel do Promise.any, que falta no Safari do iOS 12. */
-function primeiroQueConfirmar(envios) {
-  return new Promise(function (resolve, reject) {
-    var falhas = 0;
-    envios.forEach(function (envio) {
-      envio.then(resolve, function () {
-        if (++falhas === envios.length) reject(new Error('nenhum CRM confirmou o recebimento'));
-      });
-    });
-  });
 }
 
 /* NOVO: ao limpar o formulário (sucesso do envio) o erro do telefone sai junto */
@@ -586,95 +555,52 @@ document.getElementById('formulario').addEventListener('submit', async function 
   feedback.hidden       = true;
   feedback.className    = 'form-feedback';
 
+  var nome     = document.getElementById('nome').value.trim();
   var whatsapp = document.getElementById('tel').value.replace(/\D/g, '');
   var email    = document.getElementById('email').value.trim();
   var eventId  = novoEventId();
   logConv('formulario recebido', eventId);
 
-  // ALTERADO: os nomes abaixo são os slugs reais dos campos no SprintHub
-  // (confirmados pelo schema que a própria API devolve em caso de erro 400).
-  // Não renomear sem conferir no CRM — nome errado = campo chega vazio.
-  // "nome" e "whatsapp" são obrigatórios: a API responde 400 sem eles.
-  var params = {
-    // ALTERADO: era "firstname", que a API rejeita com
-    // 400 "nome deve ser string, e é obrigatório" — nenhum lead entrava.
-    nome:                       document.getElementById('nome').value.trim(),
-    email:                      email,
-    // ALTERADO: envia só os dígitos (11999999999); a máscara é só visual
-    whatsapp:                   whatsapp,
-    qual_o_valor_inicial_do_s:  document.getElementById('capital-form').value,
-    voce_ja_investe_em_alguma:  document.getElementById('modalidade').value,
-    voce_esta_pronto_para_inv:  document.getElementById('prazo-decisao').value,
-
-    // Atribuicao preservada desde a ENTRADA na landing page. Nao e relida da
-    // URL no envio: quem recarrega sem os parametros nao perde a origem.
-    site_de_origem:  window.location.href,
-    landing_page:    atribuicao.landing_page || '',
-    utm_source:      atribuicao.utm_source   || '',
-    utm_medium:      atribuicao.utm_medium   || '',
-    utm_term:        atribuicao.utm_term     || '',
-    utm_content:     atribuicao.utm_content  || '',
-    utm_campaing:    atribuicao.utm_campaign || '', // (sic) o campo no SprintHub esta grafado "campaing"
-    utm_id:          atribuicao.utm_id       || '',
-    cta_origem:      ctaOrigem || 'direto',
-
-    // Sinais de clique da Meta, para a Conversions API casar a conversao com
-    // o anuncio quando for ligada. _fbc so existe se o pixel tiver carregado,
-    // por isso o fbclid cru vai junto como plano B.
-    fbclid:          atribuicao.fbclid || '',
-    fbc:             lerCookie('_fbc'),
-    fbp:             lerCookie('_fbp'),
-
-    // Auditoria: e o que permite cruzar lead no CRM x evento na Meta.
-    // Campos ainda sem slug correspondente no SprintHub somem em silencio
-    // ate serem criados la.
-    event_id:        eventId,
-    primeira_visita: atribuicao.primeira_visita || '',
-    convertido_em:   new Date().toISOString(),
-  };
-
-  // ALTERADO: o hook do SprintHub lê os dados da QUERY STRING e ignora o corpo
-  // da requisição. Por isso os campos vão na URL, e não como JSON no body.
-  var query = new URLSearchParams();
-  Object.keys(params).forEach(function (k) {
-    if (params[k]) query.append(k, params[k]);
-  });
-
-  // A URL base já possui "?", então os campos são anexados com "&"
-  var url = WEBHOOK_URL + '&' + query.toString();
-
   // Chaves exatas da webhook do Chroma. Telefone só com dígitos e com o
   // DDI: 5547999346074.
-  var dadosChroma = {
-    nome:                 params.nome,
+  var dados = {
+    nome:                 nome,
     telefone:             '55' + whatsapp,
     email:                email,
     capital_disponivel:   textoOpcao('capital-form'),
     ja_investe:           textoOpcao('modalidade'),
     pronto_para_investir: textoOpcao('prazo-decisao'),
     pixel:                PIXEL_ID,
+
+    // Atribuição preservada desde a ENTRADA na landing page. Não é relida da
+    // URL no envio: quem recarrega sem os parâmetros não perde a origem.
+    // O CRM só grava a chave declarada na webhook "LP ARI" do Chroma, com
+    // este mesmo nome: as utm_* estão; landing_page, cta_origem e os sinais
+    // da Meta abaixo ainda são descartados em silêncio.
+    landing_page: atribuicao.landing_page || '',
+    utm_source:   atribuicao.utm_source   || '',
+    utm_medium:   atribuicao.utm_medium   || '',
+    utm_campaign: atribuicao.utm_campaign || '',
+    utm_content:  atribuicao.utm_content  || '',
+    utm_term:     atribuicao.utm_term     || '',
+    utm_id:       atribuicao.utm_id       || '',
+    cta_origem:   ctaOrigem || 'direto',
+
+    // Sinais de clique da Meta: o Chroma usa fbc/fbp — ou monta o fbc a
+    // partir do fbclid — nos eventos que devolve à Meta. _fbc só existe se
+    // o pixel tiver carregado, por isso o fbclid cru vai junto como plano B.
+    fbclid:       atribuicao.fbclid || '',
+    fbc:          lerCookie('_fbc'),
+    fbp:          lerCookie('_fbp'),
   };
 
-  // Os dois CRMs recebem ao mesmo tempo. Cada falha vai ao console; a do
-  // Chroma também fica no log da Vercel, com o lead, para reenvio manual.
-  var envioSprintHub = enviarSprintHub(url).then(
-    function () { logConv('SprintHub recebeu o lead', eventId); },
-    function (err) { console.error('[ARI] SprintHub não recebeu o lead:', err); throw err; }
-  );
-  var envioChroma = enviarChroma(dadosChroma).then(
-    function () { logConv('Chroma recebeu o lead', eventId); },
-    function (err) { console.error('[ARI] Chroma não recebeu o lead (detalhe no log da Vercel):', err); throw err; }
-  );
-
   try {
-    // O primeiro CRM que confirmar basta: com o lead guardado em um deles,
-    // pedir para a pessoa reenviar só duplicaria no outro. O envio mais
-    // lento segue em segundo plano. Se os dois falharem, cai no catch e o
-    // Lead não dispara.
-    await primeiroQueConfirmar([envioSprintHub, envioChroma]);
+    // Sem confirmação do CRM, cai no catch e o Lead não dispara.
+    await enviarChroma(dados);
+    logConv('Chroma recebeu o lead', eventId);
 
     marcarEnvio();
-    dispararLead(eventId, dadosCorrespondencia(params.nome, email, whatsapp));
+    dispararLead(eventId, dadosCorrespondencia(nome, email, whatsapp));
 
     // Sem redirect para o /obrigado: a confirmação aparece no lugar do
     // formulário, e o beacon do pixel sai sem risco de a navegação cortá-lo.
@@ -682,7 +608,7 @@ document.getElementById('formulario').addEventListener('submit', async function 
     travarFormulario(true);
 
   } catch (err) {
-    console.error('[ARI] Erro ao enviar formulario:', err);
+    console.error('[ARI] Erro ao enviar formulario (detalhe no log da Vercel):', err);
     feedback.textContent = 'Ocorreu um erro ao enviar. Por favor, tente novamente.';
     feedback.classList.add('form-feedback--err');
     feedback.hidden = false;
