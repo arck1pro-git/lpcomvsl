@@ -17,9 +17,10 @@ document.querySelectorAll('a[data-cta]').forEach(function (btn) {
    RASTREAMENTO DE CONVERSÃO (META) — FONTE ÚNICA
    ═══════════════════════════════════════════════════════════
    Tudo que diz respeito ao evento Lead mora nesta seção, e só aqui.
-   Fluxo único: o formulário vai ao CRM Chroma; confirmado o recebimento,
-   o Lead dispara e o formulário trava no aparelho por 24 h. Sem filtro
-   de robô. */
+   Fluxo único: o formulário vai ao CRM Chroma; quando ele confirma — ou,
+   se demorar ou estiver fora, depois de 8 s, com o lead pendente no
+   aparelho para reenvio —, o Lead dispara e o formulário trava no aparelho
+   por 24 h. Sem filtro de robô. */
 
 /* ─── ARMAZENAMENTO ─────────────────────────────────────── */
 /* Guarda a atribuição entre visitas e a hora do último envio do aparelho.
@@ -120,8 +121,10 @@ function novoEventId() {
 /* ─── CORRESPONDÊNCIA AVANÇADA ──────────────────────────── */
 /* Nome, e-mail e telefone seguem com o Lead para a Meta casar o evento com
    a conta de quem converteu. O pixel aplica SHA-256 no navegador antes de
-   enviar: o dado em texto puro não sai para a Meta. Também não é gravado
-   no localStorage — só passa por aqui na hora do disparo.
+   enviar: o dado em texto puro não sai para a Meta. Para o pixel, nada
+   disso é gravado no localStorage — só passa por aqui na hora do disparo.
+   (O lead pendente, em LEADS PENDENTES, guarda o formulário só até o CRM
+   confirmar.)
    Formato pedido pela Meta: tudo minúsculo; nome sem pontuação, primeiro
    nome em fn e último sobrenome em ln; telefone com DDI 55 + DDD + número,
    só dígitos. O telefone também vai como external_id: é a mesma chave que
@@ -179,8 +182,9 @@ function marcarEnvio() {
 
 /* ─── ÚNICO PONTO DE DISPARO DO LEAD ────────────────────── */
 /* Nenhum outro lugar do projeto pode chamar fbq('track', 'Lead').
-   Só é invocada depois que o CRM Chroma confirma o recebimento — e o
-   formulário trava logo em seguida, então roda uma vez por aparelho. */
+   Só é invocada no envio do formulário válido, depois da confirmação do
+   CRM ou do prazo dela — e o formulário trava logo em seguida, então roda
+   uma vez por aparelho. */
 function dispararLead(eventId, correspondencia) {
   if (typeof fbq !== 'function') {
     logConv('pixel indisponível: Lead não enviado', eventId);
@@ -467,11 +471,13 @@ telEl.addEventListener('blur',   function () { validarTel(true); });
 /* O lead vai só para o Chroma; o SprintHub saiu em 15/10/2026.
    O Chroma recebe pelo SERVIDOR: a URL da webhook dele leva o segredo e não
    pode estar neste arquivo, que qualquer visitante lê. O navegador chama
-   a função api/lead.js, no mesmo domínio, e ela repassa ao CRM — com
-   novas tentativas e, se mesmo assim falhar, o lead inteiro no log da
-   Vercel para reenvio manual. A lista oficial de chaves está em
-   api/lead.js. */
-var CHROMA_ENDPOINT = '/api/lead';
+   a função api/lead.js, no mesmo domínio, e ela repassa ao CRM, com
+   novas tentativas. O formulário não depende do CRM estar de pé: sem
+   confirmação em ESPERA_CONFIRMACAO_MS, a pessoa vê a confirmação do mesmo
+   jeito e o lead fica pendente no aparelho, com reenvio automático. A
+   lista oficial de chaves está em api/lead.js. */
+var CHROMA_ENDPOINT        = '/api/lead';
+var ESPERA_CONFIRMACAO_MS  = 8000; // Chroma frio + função fria ≈ 7 s
 
 /* Resolve quando o CRM confirma o recebimento; rejeita no resto.
    Uma nova tentativa do navegador quando a falha é no caminho até a
@@ -481,10 +487,14 @@ var CHROMA_ENDPOINT = '/api/lead';
    seguro: o CRM reaproveita o contato do mesmo WhatsApp. */
 var ESPERA_REENVIO_MS = 1500;
 
+function esperar(ms) {
+  return new Promise(function (r) { setTimeout(r, ms); });
+}
+
 async function enviarChroma(dados) {
   var falha;
   for (var tentativa = 1; tentativa <= 2; tentativa++) {
-    if (tentativa > 1) await new Promise(function (r) { setTimeout(r, ESPERA_REENVIO_MS); });
+    if (tentativa > 1) await esperar(ESPERA_REENVIO_MS);
     var response;
     try {
       response = await fetch(CHROMA_ENDPOINT, {
@@ -503,6 +513,68 @@ async function enviarChroma(dados) {
   }
   throw falha;
 }
+
+/* ─── LEADS PENDENTES ───────────────────────────────────── */
+/* O lead entra aqui ANTES de ir ao CRM e só sai quando o Chroma confirma.
+   Com o Chroma fora do ar, a pessoa vê a confirmação normal e o navegador
+   dela reenvia sozinho: em segundo plano enquanto a página está aberta, e
+   de novo a cada volta ao site, por até 7 dias. É o único lugar onde os
+   dados do formulário ficam gravados no aparelho, e só até a entrega.
+   Sem localStorage (aba anônima, storage bloqueado), o reenvio vale só
+   enquanto a página estiver aberta. */
+var STORE_PENDENTES      = 'ari.pendentes.v1';
+var VALIDADE_PENDENTE_MS = 7 * 24 * 60 * 60 * 1000;
+var ESPERAS_PENDENTES_MS = [30000, 60000, 120000, 300000, 600000]; // com a página aberta
+var ATRASO_AO_ABRIR_MS   = 5000; // ao abrir a página, depois do pixel carregar
+var pendentesMemoria     = [];   // espelho para quando o localStorage falha
+
+function lerPendentes() {
+  var lista = storeLer(STORE_PENDENTES);
+  if (!Array.isArray(lista)) lista = pendentesMemoria;
+  var agora = Date.now();
+  return lista.filter(function (p) {
+    return p && p.dados && agora - p.criado >= 0 && agora - p.criado < VALIDADE_PENDENTE_MS;
+  });
+}
+
+function gravarPendentes(lista) {
+  pendentesMemoria = lista;
+  if (lista.length) { storeGravar(STORE_PENDENTES, lista); return; }
+  try { localStorage.removeItem(STORE_PENDENTES); } catch (e) { /* sem storage */ }
+}
+
+function guardarPendente(id, dados) {
+  gravarPendentes(lerPendentes().concat([{ id: id, dados: dados, criado: Date.now() }]));
+}
+
+function tirarPendente(id) {
+  gravarPendentes(lerPendentes().filter(function (p) { return p.id !== id; }));
+}
+
+var reenvioAgendado = null;
+var proximaEspera   = 0;
+
+async function reenviarPendentes() {
+  reenvioAgendado = null;
+  var lista = lerPendentes();
+  gravarPendentes(lista); // descarta os vencidos
+  for (var i = 0; i < lista.length; i++) {
+    try {
+      await enviarChroma(lista[i].dados);
+      tirarPendente(lista[i].id);
+      logConv('lead pendente entregue ao Chroma', lista[i].id);
+    } catch (err) { /* fica para a próxima rodada */ }
+  }
+  agendarReenvio();
+}
+
+function agendarReenvio() {
+  if (reenvioAgendado || !lerPendentes().length) return;
+  if (proximaEspera >= ESPERAS_PENDENTES_MS.length) return; // segue na próxima visita
+  reenvioAgendado = setTimeout(reenviarPendentes, ESPERAS_PENDENTES_MS[proximaEspera++]);
+}
+
+if (lerPendentes().length) setTimeout(reenviarPendentes, ATRASO_AO_ABRIR_MS);
 
 /* Acorda a função e o CRM quando a pessoa vai para o formulário — clique
    num botão que leva a ele, ou foco no primeiro campo. Até ela terminar de
@@ -631,28 +703,40 @@ document.getElementById('formulario').addEventListener('submit', async function 
     fbp:          lerCookie('_fbp'),
   };
 
-  try {
-    // Sem confirmação do CRM, cai no catch e o Lead não dispara.
-    await enviarChroma(dados);
-    logConv('Chroma recebeu o lead', eventId);
+  // Guardado ANTES de enviar: se a aba fechar no meio, ou o Chroma estiver
+  // fora, o lead não se perde — ver LEADS PENDENTES.
+  guardarPendente(eventId, dados);
 
-    marcarEnvio();
-    dispararLead(eventId, dadosCorrespondencia(nome, email, whatsapp));
+  // O envio corre contra um prazo. Confirmou antes, ótimo. Falhou ou passou
+  // do prazo, a pessoa vê a confirmação do mesmo jeito: o formulário nunca
+  // trava por causa do CRM. O envio em andamento segue (keepalive) e, se
+  // não der certo, o reenvio automático assume.
+  var envio = enviarChroma(dados).then(
+    function () {
+      tirarPendente(eventId);
+      logConv('Chroma recebeu o lead', eventId);
+      return true;
+    },
+    function (err) {
+      console.error('[ARI] Chroma não confirmou; lead pendente, reenvio automático:', err);
+      agendarReenvio();
+      return false;
+    }
+  );
+  var confirmado = await Promise.race([
+    envio,
+    esperar(ESPERA_CONFIRMACAO_MS).then(function () { return false; }),
+  ]);
+  if (!confirmado) logConv('sem confirmação do Chroma a tempo: lead pendente', eventId);
 
-    // Sem redirect para o /obrigado: a confirmação aparece no lugar do
-    // formulário, e o beacon do pixel sai sem risco de a navegação cortá-lo.
-    this.reset(); // evita que o navegador restaure os valores ao voltar
-    travarFormulario(true);
+  // O Lead sai mesmo sem a confirmação: a pessoa converteu de verdade e o
+  // lead está guardado. Segurar o evento esperando o CRM é o que fazia
+  // quem fechava a página virar clique sem Lead.
+  marcarEnvio();
+  dispararLead(eventId, dadosCorrespondencia(nome, email, whatsapp));
 
-  } catch (err) {
-    console.error('[ARI] Erro ao enviar formulario (detalhe no log da Vercel):', err);
-    feedback.textContent = 'Ocorreu um erro ao enviar. Por favor, tente novamente.';
-    feedback.classList.add('form-feedback--err');
-    feedback.hidden = false;
-
-    // O botão só volta no erro. No sucesso ele vira "Dados enviados" e
-    // fica travado.
-    submitBtn.disabled    = false;
-    submitBtn.textContent = 'Quero investir no ARI';
-  }
+  // Sem redirect para o /obrigado: a confirmação aparece no lugar do
+  // formulário, e o beacon do pixel sai sem risco de a navegação cortá-lo.
+  this.reset(); // evita que o navegador restaure os valores ao voltar
+  travarFormulario(true);
 });

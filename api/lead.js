@@ -61,8 +61,10 @@ const TAMANHO_MAX_CAMPO  = 1000;        // landing_page com fbclid e UTMs passa 
 
 /* ─── LOG ───────────────────────────────────────────────── */
 /* Prefixo único para achar a jornada nos Runtime Logs da Vercel.
-   Lead que não entrou no CRM sai inteiro no log, para reenvio manual:
-   procure por "[lead-chroma] FALHA". */
+   Lead que não entrou no CRM sai inteiro no log: procure por
+   "[lead-chroma] FALHA". O navegador também guarda o lead e reenvia
+   sozinho até o CRM confirmar (js/main.js, LEADS PENDENTES); o log é a
+   última rede, para quando o aparelho nunca mais voltar ao site. */
 function log(nivel, etapa, dados) {
   console[nivel]('[lead-chroma] ' + etapa + ' ' + JSON.stringify(dados));
 }
