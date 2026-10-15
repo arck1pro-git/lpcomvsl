@@ -46,12 +46,17 @@ const CAMPOS_ATRIBUICAO = [
 /* Só falha temporária do CRM (5xx, rede, sem resposta) é repetida, com
    espera progressiva. 401, 404 e 422 voltariam iguais: não repete.
    Repetir é seguro — o CRM reaproveita contato e card do mesmo WhatsApp.
-   Tudo cabe em PRAZO_TOTAL_MS para a falha ser registrada antes de a
-   Vercel encerrar a função (10 s no limite mais curto do plano Hobby). */
-const PRAZO_TOTAL_MS     = 9000;
-const TIMEOUT_ENVIO_MS   = 5000;
-const ESPERAS_MS         = [500, 1500]; // antes da 2ª e da 3ª tentativa
-const FOLGA_ULTIMA_MS    = 1500;        // tempo mínimo que vale uma nova tentativa
+
+   TIMEOUT_ENVIO_MS folgado de propósito: o Chroma "frio" levou ~6 s para
+   responder em 14/10/2026, e com 5 s a função desistia de um envio que ia
+   dar certo e mandava o lead de novo. Tudo cabe em PRAZO_TOTAL_MS, abaixo
+   do maxDuration de 30 s (vercel.json), para a falha ser registrada antes
+   de a Vercel encerrar a função. */
+const PRAZO_TOTAL_MS     = 25000;
+const TIMEOUT_ENVIO_MS   = 12000;
+const ESPERAS_MS         = [1000, 3000]; // antes da 2ª e da 3ª tentativa
+const FOLGA_ULTIMA_MS    = 3000;         // tempo mínimo que vale uma nova tentativa
+const TIMEOUT_AQUECER_MS = 8000;
 const TAMANHO_MAX_CAMPO  = 1000;        // landing_page com fbclid e UTMs passa de 300
 
 /* ─── LOG ───────────────────────────────────────────────── */
@@ -153,10 +158,31 @@ async function enviarAoCrm(lead) {
   }
 }
 
+/* ─── AQUECIMENTO ───────────────────────────────────────── */
+/* GET /api/lead: o navegador chama quando a pessoa começa a preencher o
+   formulário. Acorda esta função e a rota da webhook no Chroma (o GET de
+   lá só responde 405, sem gravar nada), para o envio de verdade, segundos
+   depois, não pagar a partida a frio — é a confirmação do CRM que libera o
+   Lead do pixel, e quem espera demais fecha a página antes. Vai sem o
+   segredo: só o caminho da URL. Falhar aqui não atrapalha nada. */
+async function aquecerCrm() {
+  try {
+    await fetch(CRM_WEBHOOK_URL.split('?')[0], {
+      method: 'GET',
+      signal: AbortSignal.timeout(TIMEOUT_AQUECER_MS),
+    });
+  } catch (e) { /* aquecimento é só otimização */ }
+}
+
 /* ─── HANDLER ───────────────────────────────────────────── */
 module.exports = async function handler(req, res) {
+  if (req.method === 'GET') {
+    await aquecerCrm();
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ ok: true });
+  }
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
+    res.setHeader('Allow', 'GET, POST');
     return res.status(405).json({ ok: false, erro: 'use POST' });
   }
 

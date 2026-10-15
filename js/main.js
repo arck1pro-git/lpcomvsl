@@ -473,17 +473,54 @@ telEl.addEventListener('blur',   function () { validarTel(true); });
    api/lead.js. */
 var CHROMA_ENDPOINT = '/api/lead';
 
-/* Resolve quando o CRM confirma o recebimento; rejeita no resto. */
-function enviarChroma(dados) {
-  return fetch(CHROMA_ENDPOINT, {
-    method:    'POST',
-    headers:   { 'Content-Type': 'application/json' },
-    body:      JSON.stringify(dados),
-    keepalive: true, // segue mesmo se a pessoa fechar a aba logo após a confirmação
-  }).then(function (response) {
-    if (!response.ok) throw new Error('HTTP ' + response.status);
-  });
+/* Resolve quando o CRM confirma o recebimento; rejeita no resto.
+   Uma nova tentativa do navegador quando a falha é no caminho até a
+   função — rede do celular caindo, plataforma respondendo 404/5xx. Não
+   repete o 502, que é a função dizendo que o CRM falhou mesmo depois das
+   tentativas dela, nem o 422, dado inválido: voltariam iguais. Repetir é
+   seguro: o CRM reaproveita o contato do mesmo WhatsApp. */
+var ESPERA_REENVIO_MS = 1500;
+
+async function enviarChroma(dados) {
+  var falha;
+  for (var tentativa = 1; tentativa <= 2; tentativa++) {
+    if (tentativa > 1) await new Promise(function (r) { setTimeout(r, ESPERA_REENVIO_MS); });
+    var response;
+    try {
+      response = await fetch(CHROMA_ENDPOINT, {
+        method:    'POST',
+        headers:   { 'Content-Type': 'application/json' },
+        body:      JSON.stringify(dados),
+        keepalive: true, // segue mesmo se a pessoa fechar a aba logo após a confirmação
+      });
+    } catch (err) {
+      falha = err; // rede: vale tentar de novo
+      continue;
+    }
+    if (response.ok) return;
+    falha = new Error('HTTP ' + response.status);
+    if (response.status === 502 || response.status === 422) break;
+  }
+  throw falha;
 }
+
+/* Acorda a função e o CRM quando a pessoa vai para o formulário — clique
+   num botão que leva a ele, ou foco no primeiro campo. Até ela terminar de
+   preencher, os dois já responderam uma vez, e o envio de verdade não paga
+   a partida a frio (~6 s no Chroma), que atrasaria o Lead do pixel. Uma
+   vez por página; falhar não atrapalha o envio. */
+var crmAquecido = false;
+
+function aquecerCrm() {
+  if (crmAquecido || envioRecente()) return;
+  crmAquecido = true;
+  fetch(CHROMA_ENDPOINT, { method: 'GET' }).catch(function () {});
+}
+
+document.querySelectorAll('a[data-cta]').forEach(function (btn) {
+  btn.addEventListener('click', aquecerCrm);
+});
+document.getElementById('formulario').addEventListener('focusin', aquecerCrm);
 
 /* No CRM a resposta aparece como o texto que a pessoa escolheu
    ("R$100.000 a R$300.000"), não como o value interno ("100k-300k"). */

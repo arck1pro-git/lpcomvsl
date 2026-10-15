@@ -190,14 +190,21 @@ fbq('track', 'PageView');
         <!-- Imagem do litoral — ocupa toda a altura da coluna esquerda -->
         <!-- Fora da primeira tela: carrega só quando a pessoa rola até aqui.
              1600 px cobre a coluna em tela retina; o original tinha 8064 px e
-             39 MB, e era pré-carregado no topo com prioridade alta. -->
+             39 MB, e era pré-carregado no topo com prioridade alta.
+             No celular vai a versão de 800 px (75 KB, contra 245 KB): em rede
+             lenta o Chrome adianta imagens "lazy" bem abaixo da tela, e a de
+             1600 disputava a banda com o pixel — no 3G o PageView saía 1,8 s
+             mais tarde, e quem fecha antes vira clique sem visita. -->
         <div class="litoral-img-box">
-          <img
-            src="img/porto-belo-1600.webp"
-            alt="Vista aérea do litoral de Porto Belo, Santa Catarina"
-            width="1600" height="900"
-            loading="lazy"
-            decoding="async">
+          <picture>
+            <source media="(max-width: 600px)" srcset="img/porto-belo-800.webp">
+            <img
+              src="img/porto-belo-1600.webp"
+              alt="Vista aérea do litoral de Porto Belo, Santa Catarina"
+              width="1600" height="900"
+              loading="lazy"
+              decoding="async">
+          </picture>
           <div class="litoral-img-label" aria-hidden="true">Porto Belo · SC</div>
         </div>
 
@@ -598,9 +605,10 @@ fbq('track', 'PageView');
            eles não entra no CRM nem conta para a Meta. -->
       <div class="footer-brand-block">
         <div class="footer-logos">
-          <img src="img/ARI.webp"   alt="ARI — Ativo de Renda Imobiliária" class="footer-logo-ari">
+          <!-- lazy: no rodapé, não disputam a banda com o pixel no carregamento -->
+          <img src="img/ARI.webp"   alt="ARI — Ativo de Renda Imobiliária" class="footer-logo-ari"  loading="lazy" decoding="async">
           <span class="footer-logos-sep" aria-hidden="true"></span>
-          <img src="img/logo.webp"  alt="Arck1Pro"                         class="footer-logo-arck">
+          <img src="img/logo.webp"  alt="Arck1Pro"                         class="footer-logo-arck" loading="lazy" decoding="async">
         </div>
       </div>
 
