@@ -89,12 +89,62 @@ function capturarAtribuicao() {
 
   if (!salvo.landing_page)    salvo.landing_page    = window.location.href;
   if (!salvo.primeira_visita) salvo.primeira_visita = new Date().toISOString();
+  // De onde a pessoa veio na primeira visita: é a origem do lead quando o
+  // link não trouxe UTM (ver UTMs: SEMPRE NO LEAD).
+  if (salvo.referrer === undefined) salvo.referrer = document.referrer || '';
 
   storeGravar(STORE_ATRIBUICAO, salvo);
   return salvo;
 }
 
 var atribuicao = capturarAtribuicao();
+
+/* ─── UTMs: SEMPRE NO LEAD ──────────────────────────────── */
+/* Todo lead leva as seis UTMs, como leva o pixel. Vindas do link (anúncio,
+   e-mail, bio), vão como chegaram. Sem UTM no link — post orgânico, link
+   compartilhado, endereço digitado —, a origem sai do referrer da primeira
+   visita: utm_source é de onde a pessoa veio ("instagram", "google"… ou
+   "direto") e utm_medium o tipo ("social", "organico", "referencia",
+   "direto"). O que não dá para saber vai como "(não informado)". Campo
+   vazio o CRM descarta, e o lead aparecia sem origem nenhuma. */
+var UTM_NAO_INFORMADO = '(não informado)';
+
+var ORIGENS_CONHECIDAS = [
+  [/(^|\.)instagram\.com$/,                     'instagram', 'social'],
+  [/(^|\.)(facebook|fb|messenger)\.com$/,       'facebook',  'social'],
+  [/(^|\.)(youtube\.com|youtu\.be)$/,           'youtube',   'social'],
+  [/(^|\.)(linkedin\.com|lnkd\.in)$/,           'linkedin',  'social'],
+  [/(^|\.)tiktok\.com$/,                        'tiktok',    'social'],
+  [/(^|\.)(twitter\.com|x\.com|t\.co)$/,        'x',         'social'],
+  [/(^|\.)(whatsapp\.com|wa\.me)$/,             'whatsapp',  'social'],
+  [/(^|\.)google\.[a-z.]+$/,                    'google',    'organico'],
+  [/(^|\.)bing\.com$/,                          'bing',      'organico'],
+  [/(^|\.)(yahoo\.com|duckduckgo\.com)$/,       'busca',     'organico'],
+];
+
+function origemSemUtm(referrer, temFbclid) {
+  var host = '';
+  try { host = referrer ? new URL(referrer).hostname.replace(/^www\./, '') : ''; } catch (e) { /* referrer inválido */ }
+  if (host === window.location.hostname) host = ''; // navegação dentro do site não é origem
+  if (!host) return temFbclid ? ['meta', 'social'] : ['direto', 'direto'];
+  for (var i = 0; i < ORIGENS_CONHECIDAS.length; i++) {
+    if (ORIGENS_CONHECIDAS[i][0].test(host)) return [ORIGENS_CONHECIDAS[i][1], ORIGENS_CONHECIDAS[i][2]];
+  }
+  return [host, 'referencia'];
+}
+
+function utmsDoLead() {
+  var temUtm = PARAMS_UTM.some(function (k) { return atribuicao[k]; });
+  var origem = temUtm ? [] : origemSemUtm(atribuicao.referrer, !!atribuicao.fbclid);
+  return {
+    utm_source:   atribuicao.utm_source   || origem[0] || UTM_NAO_INFORMADO,
+    utm_medium:   atribuicao.utm_medium   || origem[1] || UTM_NAO_INFORMADO,
+    utm_campaign: atribuicao.utm_campaign || UTM_NAO_INFORMADO,
+    utm_content:  atribuicao.utm_content  || UTM_NAO_INFORMADO,
+    utm_term:     atribuicao.utm_term     || UTM_NAO_INFORMADO,
+    utm_id:       atribuicao.utm_id       || UTM_NAO_INFORMADO,
+  };
+}
 
 /* Cookies que a Meta usa para casar a conversão com o clique no anúncio.
    Seguem junto do lead: sem eles os eventos que o Chroma devolve à Meta
@@ -668,6 +718,7 @@ document.getElementById('formulario').addEventListener('submit', async function 
   var whatsapp = document.getElementById('tel').value.replace(/\D/g, '');
   var email    = document.getElementById('email').value.trim();
   var eventId  = novoEventId();
+  var utms     = utmsDoLead();
   logConv('formulario recebido', eventId);
 
   // Chaves exatas da webhook do Chroma. Telefone só com dígitos e com o
@@ -681,18 +732,20 @@ document.getElementById('formulario').addEventListener('submit', async function 
     pronto_para_investir: textoOpcao('prazo-decisao'),
     pixel:                PIXEL_ID,
 
-    // Atribuição preservada desde a ENTRADA na landing page. Não é relida da
+    // As seis UTMs vão SEMPRE, preenchidas — ver UTMs: SEMPRE NO LEAD.
+    // Atribuição preservada desde a ENTRADA na landing page; não é relida da
     // URL no envio: quem recarrega sem os parâmetros não perde a origem.
+    utm_source:   utms.utm_source,
+    utm_medium:   utms.utm_medium,
+    utm_campaign: utms.utm_campaign,
+    utm_content:  utms.utm_content,
+    utm_term:     utms.utm_term,
+    utm_id:       utms.utm_id,
+
     // O CRM só grava a chave declarada na webhook "LP ARI" do Chroma, com
     // este mesmo nome: as utm_* estão; landing_page, cta_origem e os sinais
     // da Meta abaixo ainda são descartados em silêncio.
     landing_page: atribuicao.landing_page || '',
-    utm_source:   atribuicao.utm_source   || '',
-    utm_medium:   atribuicao.utm_medium   || '',
-    utm_campaign: atribuicao.utm_campaign || '',
-    utm_content:  atribuicao.utm_content  || '',
-    utm_term:     atribuicao.utm_term     || '',
-    utm_id:       atribuicao.utm_id       || '',
     cta_origem:   ctaOrigem || 'direto',
 
     // Sinais de clique da Meta: o Chroma usa fbc/fbp — ou monta o fbc a

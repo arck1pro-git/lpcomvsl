@@ -20,7 +20,7 @@ const CRM_WEBHOOK_URL = "https://chromacrm.vercel.app/api/webhooks/typebot-lp-ar
 /* ─── CAMPOS ACEITOS PELO CRM ───────────────────────────── */
 /* Os nomes exatos que a webhook conhece. Chave que a webhook não declara
    o CRM descarta em silêncio — acento, hífen e maiúscula importam. Só as
-   chaves destas duas listas saem daqui, mesmo que o navegador mande outras. */
+   chaves destas listas saem daqui, mesmo que o navegador mande outras. */
 const CAMPOS = [
   'nome',                 // Contato · Nome
   'telefone',             // Contato · WhatsApp
@@ -31,16 +31,22 @@ const CAMPOS = [
   'pixel',                // Contato · campo "pixel_id" — o CRM usa para devolver eventos à Meta
 ];
 
-/* Atribuição: ia para o SprintHub, que saiu em 15/10/2026. Na webhook "LP
-   ARI" as utm_* estão declaradas (15/10/2026) e viram campos do contato;
-   landing_page, cta_origem, fbclid, fbc e fbp ainda NÃO, e o Chroma as
-   descarta. Seguem mesmo assim: declaradas lá com estes mesmos nomes,
-   passam a ser gravadas sem novo deploy. Os nomes são os que o Chroma já
-   lê — utm_* nos relatórios por campanha, fbc/fbp/fbclid nos eventos à Meta. */
-const CAMPOS_ATRIBUICAO = [
-  'landing_page', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content',
-  'utm_term', 'utm_id', 'cta_origem', 'fbclid', 'fbc', 'fbp',
+/* UTMs: vão em TODO lead, como o pixel — declaradas na webhook "LP ARI"
+   (15/10/2026), viram campos do contato e alimentam os relatórios por
+   campanha do Chroma. O navegador já manda as seis preenchidas (js/main.js,
+   UTMs: SEMPRE NO LEAD); a que chegar vazia sai daqui como
+   UTM_NAO_INFORMADO, porque campo vazio o CRM descarta. */
+const CAMPOS_UTM = [
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'utm_id',
 ];
+const UTM_NAO_INFORMADO = '(não informado)';
+
+/* Atribuição: ia para o SprintHub, que saiu em 15/10/2026. landing_page,
+   cta_origem, fbclid, fbc e fbp ainda NÃO estão declaradas na webhook, e o
+   Chroma as descarta. Seguem mesmo assim: declaradas lá com estes mesmos
+   nomes, passam a ser gravadas sem novo deploy (o Chroma já lê fbc/fbp/
+   fbclid nos eventos que devolve à Meta). */
+const CAMPOS_ATRIBUICAO = ['landing_page', 'cta_origem', 'fbclid', 'fbc', 'fbp'];
 
 /* ─── TENTATIVAS ────────────────────────────────────────── */
 /* Só falha temporária do CRM (5xx, rede, sem resposta) é repetida, com
@@ -89,6 +95,10 @@ function montarLead(corpo) {
   CAMPOS.concat(CAMPOS_ATRIBUICAO).forEach(function (campo) {
     const valor = campo === 'telefone' ? telefoneComDdi(corpo[campo]) : texto(corpo[campo]);
     if (valor) lead[campo] = valor;
+  });
+  // As UTMs nunca ficam de fora.
+  CAMPOS_UTM.forEach(function (campo) {
+    lead[campo] = texto(corpo[campo]) || UTM_NAO_INFORMADO;
   });
   return lead;
 }
